@@ -27,7 +27,7 @@ web_app = Flask(__name__)
 
 @web_app.route('/')
 def home():
-    return "⚡ ANYSNAP Bot is Running Successfully!"
+    return "⚡ Gourisen OSINT Bot is Running Successfully!"
 
 def run_web():
     port = int(os.environ.get("PORT", 8080))
@@ -47,24 +47,20 @@ SESSION_STRING = "BQI5Xz4AYmk4kg6TAh1_7Ebt65uwpCt5ryzpfEb-DlJ-hwhK2OuYoKI9Rboc39
 
 TARGET_BOT = "Random_insight69_bot"
 
-# --- 🔙 RESTORED CREDIT ---
-NEW_FOOTER = "⚡ Designed & Powered by @MAGMAxRICH"
-
-app = Client("anysnap_secure_bot", api_id=API_ID, api_hash=API_HASH, session_string=SESSION_STRING)
+app = Client("gourisen_osint_bot", api_id=API_ID, api_hash=API_HASH, session_string=SESSION_STRING)
 
 # --- DASHBOARD ---
 @app.on_message(filters.command(["start", "help", "menu"], prefixes="/") & (filters.private | filters.group))
 async def show_dashboard(client, message):
     try:
-        # --- LINKS REMOVED ---
+        # --- UPDATED DASHBOARD (NAME CHANGED, CREDIT REMOVED) ---
         text = (
-            "📖 **ANYSNAP BOT DASHBOARD**\n"
+            "📖 **Gourisen OSINT DASHBOARD**\n"
             "━━━━━━━━━━━━━━━━━━\n\n"
             "🔍 **Lookup Services:**\n"
             "📱 `/num [number]`\n🚗 `/vehicle [plate]`\n🆔 `/aadhar [uid]`\n"
-            "👨‍👩‍👧‍👦 `/familyinfo [uid]`\n🔗 `/vnum [plate]`\n💸 `/fam [id]`\n📨 `/sms [number]`\n\n"
-            "━━━━━━━━━━━━━━━━━━\n"
-            "⚡ **Designed & Powered by @MAGMAxRICH**"
+            "👨‍👩‍👧‍👦 `/familyinfo [uid]`\n🔗 `/vnum [plate]`\n💸 `/fam [id]`\n📨 `/sms [number]`\n"
+            "━━━━━━━━━━━━━━━━━━"
         )
         await message.reply_text(text, disable_web_page_preview=True)
     except Exception as e:
@@ -78,7 +74,7 @@ async def process_request(client, message):
         if len(message.command) < 2:
             return await message.reply_text(f"❌ **Data Missing!**\nUsage: `/{message.command[0]} <value>`")
 
-        status_msg = await message.reply_text(f"🔍 **Searching via ANYSNAP...**")
+        status_msg = await message.reply_text(f"🔍 **Searching via Gourisen OSINT...**")
 
         try:
             sent_req = await client.send_message(TARGET_BOT, message.text)
@@ -185,8 +181,8 @@ async def process_request(client, message):
         except Exception:
             pass
 
-        # --- SENDING RESULT (NO AUTO DELETE) ---
-        formatted_msg = f"```json\n{final_output}\n```\n\n{NEW_FOOTER}"
+        # --- SENDING RESULT (NO FOOTER, NO AUTO DELETE) ---
+        formatted_msg = f"```json\n{final_output}\n```"
         await status_msg.delete()
 
         if len(formatted_msg) > 4000:
