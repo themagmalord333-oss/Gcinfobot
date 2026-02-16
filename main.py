@@ -1,159 +1,240 @@
 import os
 import asyncio
-import json
-import threading
-from flask import Flask
-from pyrogram import Client, filters, enums
-from pyrogram.errors import UserNotParticipant, PeerIdInvalid, ChannelInvalid
+import logging
 
-# --- 🌐 WEB SERVER (Render Error Fix) ---
+# --- ⚠️ CRITICAL FIX FOR PYTHON 3.10+ / 3.14 (MUST BE AT THE TOP) ---
+# This creates an event loop before Pyrogram tries to find one during import.
+try:
+    asyncio.get_event_loop()
+except RuntimeError:
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+
+# --- NOW IMPORT EVERYTHING ELSE ---
+import json
+import re
+from threading import Thread
+from flask import Flask
+from pyrogram import Client, filters, idle
+from pyrogram.errors import PeerIdInvalid
+
+# --- LOGGING SETUP ---
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# --- FAKE WEBSITE FOR RENDER ---
 web_app = Flask(__name__)
 
 @web_app.route('/')
 def home():
-    return "Bot is Running 24/7! 🚀"
+    return "⚡ ANYSNAP Bot is Running Successfully!"
 
 def run_web():
     port = int(os.environ.get("PORT", 8080))
-    web_app.run(host='0.0.0.0', port=port)
+    web_app.run(host="0.0.0.0", port=port)
 
-t = threading.Thread(target=run_web)
-t.daemon = True
-t.start()
+def keep_alive():
+    t = Thread(target=run_web)
+    t.daemon = True
+    t.start()
 
 # --- CONFIGURATION ---
 API_ID = 37314366
 API_HASH = "bd4c934697e7e91942ac911a5a287b46"
 
-# 👇👇 YAHAN APNA NAYA GENERATE KIYA HUA STRING PASTE KAREIN 👇👇
-SESSION_STRING = "BQI5Xz4AQqz9RmhHLzmvF9-Bt6WIN65bdc6IbDerxk8kuuZbVy9dstGTN120mILr9sqR4qxYl-VpJ0GpKxpECmbUqSla0-Y49Lj-ENjxA9np0_hLpVBY6xCw0TWBgetpfMygqv2VVKIHMcDlqXzQUJq4cdAviXxwwFa5C89PcsCt4LKwb45gboSbir8YCmHWy_ob5D7sHthy-5o68JtW68o9lZenYRuEzSZXI8_kFv_RK8NL5cMR2zF1epTDJhV6blnLAuQ1eyMVLI4fOBByo6pvZLYdOFExbxneMKos7sPI6qy4DRLYIN8cWqIl0_38zDbT55t2WEUl3fmsBraSW82Yl9AHNAAAAAFJSgVkAA" 
+# --- 🔐 SESSION STRING (Latest Working String Kept) ---
+SESSION_STRING = "BQI5Xz4AYmk4kg6TAh1_7Ebt65uwpCt5ryzpfEb-DlJ-hwhK2OuYoKI9Rboc391MVc-TRBHL_eQkMYyl1WVuKq9po2r6RKIJBLPf9vzO7_fWiDSz0tC1XUDFFvX1PrmUFls8cZgJWg1TZx6EOYhlTMnXhhWfBOnHXb5orXyFlRd5sxrXCC-A-kEnmtfAi1UGuX4tgzUplpgYDQHS1lQK-vPExaML7FajZfsasoIXvOFWRndMSY3qOqhSqm-ZLIhRhaVa333weGM8z4hQqE9iuvsYFr4wwwAnYaRRSBob8MfIN5tGSyZpbT-6iOZTyx7ttqTh6mKqn0JatY3Lk1n6P7ulu3Pv_gAAAAFJSgVkAA"
 
-# 🎯 TARGET SETTINGS
-TARGET_BOT_USERNAME = "DeepTraceXBot"
-SEARCH_GROUP_ID = -1003542896045 
+TARGET_BOT = "Random_insight69_bot"
 
-# --- 🔐 SECURITY SETTINGS ---
-ALLOWED_GROUPS = [-1003387459132] 
-
-# Force Sub Channels
-FSUB_CONFIG = [
-    {"username": "-----", "link": "_________"},
-    {"username": "___________", "link": "__________"}
-]
+# --- 🔙 RESTORED CREDIT ---
+NEW_FOOTER = "⚡ Designed & Powered by @MAGMAxRICH"
 
 app = Client("anysnap_secure_bot", api_id=API_ID, api_hash=API_HASH, session_string=SESSION_STRING)
 
-# --- HELPER: CHECK IF USER JOINED ---
-async def check_user_joined(client, user_id):
-    missing = False
-    for ch in FSUB_CONFIG:
-        try:
-            member = await client.get_chat_member(ch["username"], user_id)
-            if member.status in [enums.ChatMemberStatus.LEFT, enums.ChatMemberStatus.BANNED]:
-                missing = True
-                break
-        except UserNotParticipant:
-            missing = True
-            break
-        except Exception:
-            pass 
-    return not missing 
-
 # --- DASHBOARD ---
-@app.on_message(filters.command(["start", "help", "menu"], prefixes="/") & (filters.private | filters.chat(ALLOWED_GROUPS)))
+# Removed ALLOWED_GROUPS check, now works in Private and All Groups
+@app.on_message(filters.command(["start", "help", "menu"], prefixes="/") & (filters.private | filters.group))
 async def show_dashboard(client, message):
-    if not await check_user_joined(client, message.from_user.id):
-        return await message.reply_text("🚫 **Access Denied!** Join channels first.")
-
-    text = (
-        "📖 **ANYSNAP BOT DASHBOARD**\n"
-        "━━━━━━━━━━━━━━━━━━\n"
-        "🔍 **Available Commands:**\n"
-        "📱 `/num [number]`\n🆔 `/aadhaar [uid]`\n🏢 `/gst [no]`\n"
-        "🏦 `/ifsc [code]`\n💰 `/upi [id]`\n💸 `/fam [id]`\n"
-        "🚗 `/vehicle [plate]`\n✈️ `/tg [username]`\n"
-        "🕵️ `/trace [num]`\n📧 `/gmail [email]`\n\n"
-        "**⚠️ Note:** Results auto-delete in 30s.\n"
-        "━━━━━━━━━━━━━━━━━━\n"
-        "⚡ **Designed & Powered by @MAGMAxRICH**"
-    )
-    await message.reply_text(text)
+    try:
+        # --- RESTORED DASHBOARD LINKS ---
+        text = (
+            "📖 **ANYSNAP BOT DASHBOARD**\n"
+            "━━━━━━━━━━━━━━━━━━\n"
+            "📢 **Updates:** [Join Here](https://t.me/+wZ9rDQC5fkYxOWJh)\n"
+            "👥 **Support:** [Join Here](https://t.me/Anysnapsupport)\n"
+            "━━━━━━━━━━━━━━━━━━\n\n"
+            "🔍 **Lookup Services:**\n"
+            "📱 `/num [number]`\n🚗 `/vehicle [plate]`\n🆔 `/aadhar [uid]`\n"
+            "👨‍👩‍👧‍👦 `/familyinfo [uid]`\n🔗 `/vnum [plate]`\n💸 `/fam [id]`\n📨 `/sms [number]`\n\n"
+            "━━━━━━━━━━━━━━━━━━\n"
+            "⚡ **Designed & Powered by @MAGMAxRICH**"
+        )
+        await message.reply_text(text, disable_web_page_preview=True)
+    except Exception as e:
+        logger.error(f"Error in dashboard: {e}")
 
 # --- MAIN LOGIC ---
-@app.on_message(filters.command(["num", "aadhaar", "gst", "ifsc", "upi", "fam", "vehicle", "tg", "trace", "gmail"], prefixes="/") & (filters.private | filters.chat(ALLOWED_GROUPS)))
+# Removed ALLOWED_GROUPS check and FSUB check
+@app.on_message(filters.command(["num", "vehicle", "aadhar", "familyinfo", "vnum", "fam", "sms"], prefixes="/") & (filters.private | filters.group))
 async def process_request(client, message):
-    if not await check_user_joined(client, message.from_user.id):
-        return await message.reply_text("🚫 **Access Denied!** Join channels first.")
-
-    if len(message.command) < 2:
-        return await message.reply_text(f"❌ **Data Missing!**\nUsage: `/{message.command[0]} <value>`")
-
-    status_msg = await message.reply_text(f"🔍 **Searching via Anysnap...**")
-    
-    try:
-        await client.get_chat(SEARCH_GROUP_ID)
-    except Exception as e:
-        await status_msg.edit(f"❌ **Bot not in Group!** Please join group `{SEARCH_GROUP_ID}` manually.")
-        return
 
     try:
-        sent_req = await client.send_message(SEARCH_GROUP_ID, message.text)
-        target_response = None
-        
-        for attempt in range(20): 
-            await asyncio.sleep(2.5) 
-            async for log in client.get_chat_history(SEARCH_GROUP_ID, limit=5):
-                if log.from_user and log.from_user.username == TARGET_BOT_USERNAME:
-                    if log.reply_to_message_id == sent_req.id:
-                        text_content = (log.text or log.caption or "").lower()
-                        if any(w in text_content for w in ["wait", "processing", "loading"]):
-                            await status_msg.edit(f"⏳ **Processing... ({attempt+1})**")
-                            break 
-                        target_response = log
-                        break 
-            if target_response: break
-        
-        if not target_response:
-            await status_msg.edit("❌ **Timeout:** No reply received.")
+        if len(message.command) < 2:
+            return await message.reply_text(f"❌ **Data Missing!**\nUsage: `/{message.command[0]} <value>`")
+
+        status_msg = await message.reply_text(f"🔍 **Searching via ANYSNAP...**")
+
+        try:
+            sent_req = await client.send_message(TARGET_BOT, message.text)
+        except PeerIdInvalid:
+             await status_msg.edit("❌ **Error:** Target Bot ID invalid. Userbot must start @Random_insight69_bot first.")
+             return
+        except Exception as e:
+            await status_msg.edit(f"❌ **Request Error:** {e}")
             return
 
+        target_response = None
+
+        # --- SMART WAIT LOOP ---
+        for attempt in range(30): 
+            await asyncio.sleep(2) 
+            try:
+                async for log in client.get_chat_history(TARGET_BOT, limit=1):
+                    if log.id == sent_req.id: continue
+
+                    text_content = (log.text or log.caption or "").lower()
+
+                    ignore_words = [
+                        "wait", "processing", "searching", "scanning", 
+                        "generating", "loading", "checking", 
+                        "looking up", "uploading", "sending file", 
+                        "attaching", "sending"
+                    ]
+
+                    if any(word in text_content for word in ignore_words) and not log.document:
+                        if f"Attempt {attempt+1}" not in status_msg.text:
+                            await status_msg.edit(f"⏳ **Fetching Data... (Attempt {attempt+1})**")
+                        continue 
+
+                    if log.document or "{" in text_content or "success" in text_content:
+                        target_response = log
+                        break
+
+                    target_response = log
+                    break
+
+            except Exception as e:
+                logger.error(f"Error fetching history: {e}")
+
+            if target_response: break
+
+        if not target_response:
+            await status_msg.edit("❌ **No Data Found**")
+            return
+
+        # --- DATA HANDLING ---
         raw_text = ""
         if target_response.document:
-            await status_msg.edit("📂 **Downloading...**")
-            file_path = await client.download_media(target_response)
-            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
-                raw_text = f.read()
-            os.remove(file_path)
-        elif target_response.photo:
-            raw_text = target_response.caption or ""
+            await status_msg.edit("📂 **Downloading Result File...**")
+            try:
+                file_path = await client.download_media(target_response)
+                with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                    raw_text = f.read()
+                os.remove(file_path)
+            except Exception as e:
+                await status_msg.edit(f"❌ **File Error:** {e}")
+                return
         elif target_response.text:
             raw_text = target_response.text
+        elif target_response.caption:
+            raw_text = target_response.caption
 
-        clean_data_list = []
-        for line in raw_text.splitlines():
-            line = line.strip()
-            if not line: continue 
-            if "@" in line or "Designed" in line or "DeepTrace" in line:
-                if not any(k in line for k in ["Name", "Number", "Vehicle", "GST", "IFSC", "Email", "Status", "DOB", "Address"]):
-                    continue
-            clean_data_list.append(line)
+        if not raw_text or len(raw_text.strip()) < 2:
+            await status_msg.edit("❌ **No Data Found**")
+            return
 
-        json_data = {
-            "status": "success",
-            "service": message.command[0],
-            "query": " ".join(message.command[1:]),
-            "data": clean_data_list,  
-            "powered_by": "@MAGMAxRICH"
-        }
-        
-        result_msg = await message.reply_text(f"```json\n{json.dumps(json_data, indent=4, ensure_ascii=False)}\n```")
+        # --- 🔥 AGGRESSIVE CLEANING ---
+        # 1. Remove escaped version (Slash wala)
+        raw_text = raw_text.replace(r"⚡ Designed & Powered by @DuXxZx\_info", "")
+        # 2. Remove normal version
+        raw_text = raw_text.replace("⚡ Designed & Powered by @DuXxZx_info", "")
+        # 3. Remove just the username (Backup)
+        raw_text = raw_text.replace(r"@DuXxZx\_info", "").replace("@DuXxZx_info", "")
+        # 4. Remove empty separator lines if left behind
+        raw_text = raw_text.replace("====================\n\n", "====================\n")
+
+        # JSON Parsing
+        final_output = raw_text 
+        try:
+            clean_text = raw_text.replace("```json", "").replace("```", "").strip()
+            json_match = re.search(r'\{.*\}', clean_text, re.DOTALL)
+
+            if json_match:
+                parsed_data = json.loads(json_match.group(0))
+                results = []
+                if "data" in parsed_data:
+                    data_part = parsed_data["data"]
+                    if isinstance(data_part, list) and len(data_part) > 0:
+                        if "results" in data_part[0]:
+                            results = data_part[0]["results"]
+                        else:
+                            results = data_part
+                    elif isinstance(data_part, dict):
+                        if "results" in data_part:
+                            results = data_part["results"]
+                        else:
+                            results = [data_part]
+                elif "results" in parsed_data:
+                    results = parsed_data["results"]
+                else:
+                    results = parsed_data
+
+                final_output = json.dumps(results, indent=4, ensure_ascii=False)
+        except Exception:
+            pass
+
+        # --- SENDING RESULT & AUTO DELETE ---
+        formatted_msg = f"```json\n{final_output}\n```\n\n{NEW_FOOTER}"
         await status_msg.delete()
-        await asyncio.sleep(30)
-        try: await result_msg.delete()
-        except: pass 
+
+        sent_messages_list = [] 
+
+        if len(formatted_msg) > 4000:
+            chunks = [formatted_msg[i:i+4000] for i in range(0, len(formatted_msg), 4000)]
+            for chunk in chunks:
+                msg = await message.reply_text(chunk)
+                sent_messages_list.append(msg)
+                await asyncio.sleep(1) 
+        else:
+            msg = await message.reply_text(formatted_msg)
+            sent_messages_list.append(msg)
+
+        # ⏳ AUTO DELETE (60s)
+        await asyncio.sleep(60)
+        for m in sent_messages_list:
+            try:
+                await m.delete()
+            except Exception:
+                pass
 
     except Exception as e:
-        await status_msg.edit(f"❌ **Error:** {str(e)}")
+        try:
+            await status_msg.edit(f"❌ **Error:** {str(e)}")
+        except:
+            pass
 
-print("🚀 Secure ANYSNAP is Live!")
-app.run()
+# --- START SERVER & BOT ---
+async def start_bot():
+    print("🚀 Starting Web Server...")
+    keep_alive() 
+    print("🚀 Starting Pyrogram Client...")
+    await app.start()
+    print("✅ Bot is Online!")
+    await idle()
+    await app.stop()
+
+if __name__ == "__main__":
+    # The loop is already created at the top, so we just retrieve it
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(start_bot())
