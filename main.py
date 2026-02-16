@@ -53,16 +53,12 @@ NEW_FOOTER = "⚡ Designed & Powered by @MAGMAxRICH"
 app = Client("anysnap_secure_bot", api_id=API_ID, api_hash=API_HASH, session_string=SESSION_STRING)
 
 # --- DASHBOARD ---
-# Removed ALLOWED_GROUPS check, now works in Private and All Groups
 @app.on_message(filters.command(["start", "help", "menu"], prefixes="/") & (filters.private | filters.group))
 async def show_dashboard(client, message):
     try:
-        # --- RESTORED DASHBOARD LINKS ---
+        # --- LINKS REMOVED ---
         text = (
             "📖 **ANYSNAP BOT DASHBOARD**\n"
-            "━━━━━━━━━━━━━━━━━━\n"
-            "📢 **Updates:** [Join Here](https://t.me/+wZ9rDQC5fkYxOWJh)\n"
-            "👥 **Support:** [Join Here](https://t.me/Anysnapsupport)\n"
             "━━━━━━━━━━━━━━━━━━\n\n"
             "🔍 **Lookup Services:**\n"
             "📱 `/num [number]`\n🚗 `/vehicle [plate]`\n🆔 `/aadhar [uid]`\n"
@@ -75,7 +71,6 @@ async def show_dashboard(client, message):
         logger.error(f"Error in dashboard: {e}")
 
 # --- MAIN LOGIC ---
-# Removed ALLOWED_GROUPS check and FSUB check
 @app.on_message(filters.command(["num", "vehicle", "aadhar", "familyinfo", "vnum", "fam", "sms"], prefixes="/") & (filters.private | filters.group))
 async def process_request(client, message):
 
@@ -155,13 +150,9 @@ async def process_request(client, message):
             return
 
         # --- 🔥 AGGRESSIVE CLEANING ---
-        # 1. Remove escaped version (Slash wala)
         raw_text = raw_text.replace(r"⚡ Designed & Powered by @DuXxZx\_info", "")
-        # 2. Remove normal version
         raw_text = raw_text.replace("⚡ Designed & Powered by @DuXxZx_info", "")
-        # 3. Remove just the username (Backup)
         raw_text = raw_text.replace(r"@DuXxZx\_info", "").replace("@DuXxZx_info", "")
-        # 4. Remove empty separator lines if left behind
         raw_text = raw_text.replace("====================\n\n", "====================\n")
 
         # JSON Parsing
@@ -194,29 +185,17 @@ async def process_request(client, message):
         except Exception:
             pass
 
-        # --- SENDING RESULT & AUTO DELETE ---
+        # --- SENDING RESULT (NO AUTO DELETE) ---
         formatted_msg = f"```json\n{final_output}\n```\n\n{NEW_FOOTER}"
         await status_msg.delete()
-
-        sent_messages_list = [] 
 
         if len(formatted_msg) > 4000:
             chunks = [formatted_msg[i:i+4000] for i in range(0, len(formatted_msg), 4000)]
             for chunk in chunks:
-                msg = await message.reply_text(chunk)
-                sent_messages_list.append(msg)
+                await message.reply_text(chunk)
                 await asyncio.sleep(1) 
         else:
-            msg = await message.reply_text(formatted_msg)
-            sent_messages_list.append(msg)
-
-        # ⏳ AUTO DELETE (60s)
-        await asyncio.sleep(60)
-        for m in sent_messages_list:
-            try:
-                await m.delete()
-            except Exception:
-                pass
+            await message.reply_text(formatted_msg)
 
     except Exception as e:
         try:
@@ -235,6 +214,5 @@ async def start_bot():
     await app.stop()
 
 if __name__ == "__main__":
-    # The loop is already created at the top, so we just retrieve it
     loop = asyncio.get_event_loop()
     loop.run_until_complete(start_bot())
