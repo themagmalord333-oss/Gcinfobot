@@ -1,6 +1,15 @@
 import os
 import asyncio
 import logging
+
+# --- ⚠️ CRITICAL FIX FOR PYTHON 3.10+ / 3.14 (MUST BE AT THE TOP) ---
+try:
+    asyncio.get_event_loop()
+except RuntimeError:
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+
+# --- NOW IMPORT EVERYTHING ELSE ---
 import json
 import re
 from threading import Thread
@@ -8,21 +17,19 @@ from flask import Flask
 from pyrogram import Client, filters, idle
 from pyrogram.errors import PeerIdInvalid
 
-# --- ⚠️ CRITICAL FIX FOR PYTHON 3.10+ ---
-try:
-    asyncio.get_event_loop()
-except RuntimeError:
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-
 # --- LOGGING SETUP ---
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# --- AUTHENTICATION CONFIG ---
+# --- AUTHENTICATION CONFIG (WHITELIST SYSTEM) ---
 OWNER_ID = 7762163050
 ADMIN_ID = 7727470646
-AUTHORIZED_USERS = [OWNER_ID, ADMIN_ID]
+
+# Ye Set RAM mein rahega (Restart hone par reset ho jayega)
+AUTHORIZED_USERS = {OWNER_ID, ADMIN_ID}
+
+def is_authorized(user_id):
+    return user_id in AUTHORIZED_USERS
 
 # --- FAKE WEBSITE FOR RENDER ---
 web_app = Flask(__name__)
@@ -48,16 +55,38 @@ TARGET_BOT = "Random_insight69_bot"
 
 app = Client("gourisen_osint_bot", api_id=API_ID, api_hash=API_HASH, session_string=SESSION_STRING)
 
-# --- HELPER: AUTH CHECK ---
-def is_authorized(user_id):
-    return user_id in AUTHORIZED_USERS
+# --- 🔐 PERMISSION COMMANDS (OWNER ONLY) ---
+@app.on_message(filters.command("auth") & filters.user(OWNER_ID))
+async def auth_user(client, message):
+    if len(message.command) < 2:
+        return await message.reply_text("ℹ️ **Usage:** `/auth [User_ID]`")
+    try:
+        uid = int(message.command[1])
+        AUTHORIZED_USERS.add(uid)
+        await message.reply_text(f"✅ User `{uid}` is now Authorized!")
+    except:
+        await message.reply_text("❌ Invalid ID")
+
+@app.on_message(filters.command("unauth") & filters.user(OWNER_ID))
+async def unauth_user(client, message):
+    if len(message.command) < 2:
+        return await message.reply_text("ℹ️ **Usage:** `/unauth [User_ID]`")
+    try:
+        uid = int(message.command[1])
+        if uid in AUTHORIZED_USERS and uid != OWNER_ID:
+            AUTHORIZED_USERS.remove(uid)
+            await message.reply_text(f"🚫 User `{uid}` Removed.")
+        else:
+            await message.reply_text("❌ Cannot remove Owner or User not found.")
+    except:
+        await message.reply_text("❌ Invalid ID")
 
 # --- DASHBOARD ---
 @app.on_message(filters.command(["start", "help", "menu"], prefixes="/") & (filters.private | filters.group))
 async def show_dashboard(client, message):
-    # Only respond if the user is authorized
+    # SECURITY CHECK
     if not is_authorized(message.from_user.id):
-        return 
+        return
 
     try:
         text = (
@@ -72,10 +101,10 @@ async def show_dashboard(client, message):
     except Exception as e:
         logger.error(f"Error in dashboard: {e}")
 
-# --- MAIN LOGIC ---
+# --- MAIN LOGIC (FULL FEATURES RESTORED) ---
 @app.on_message(filters.command(["num", "vehicle", "aadhar", "familyinfo", "vnum", "fam", "sms"], prefixes="/") & (filters.private | filters.group))
 async def process_request(client, message):
-    # Only respond if the user is authorized
+    # SECURITY CHECK
     if not is_authorized(message.from_user.id):
         return
 
@@ -102,16 +131,32 @@ async def process_request(client, message):
             try:
                 async for log in client.get_chat_history(TARGET_BOT, limit=1):
                     if log.id == sent_req.id: continue
+
                     text_content = (log.text or log.caption or "").lower()
-                    ignore_words = ["wait", "processing", "searching", "scanning", "generating", "loading"]
+
+                    ignore_words = [
+                        "wait", "processing", "searching", "scanning", 
+                        "generating", "loading", "checking", 
+                        "looking up", "uploading", "sending file", 
+                        "attaching", "sending"
+                    ]
 
                     if any(word in text_content for word in ignore_words) and not log.document:
+                        if f"Attempt {attempt+1}" not in status_msg.text:
+                            await status_msg.edit(f"⏳ **Fetching Data... (Attempt {attempt+1})**")
                         continue 
 
+                    if log.document or "{" in text_content or "success" in text_content:
+                        target_response = log
+                        break
+                    
+                    # Agar upar wale condition match nahi hue but naya message hai
                     target_response = log
                     break
+
             except Exception as e:
                 logger.error(f"Error fetching history: {e}")
+
             if target_response: break
 
         if not target_response:
@@ -121,27 +166,85 @@ async def process_request(client, message):
         # --- DATA HANDLING ---
         raw_text = ""
         if target_response.document:
-            file_path = await client.download_media(target_response)
-            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
-                raw_text = f.read()
-            os.remove(file_path)
-        else:
-            raw_text = target_response.text or target_response.caption
+            await status_msg.edit("📂 **Downloading Result File...**")
+            try:
+                file_path = await client.download_media(target_response)
+                with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                    raw_text = f.read()
+                os.remove(file_path)
+            except Exception as e:
+                await status_msg.edit(f"❌ **File Error:** {e}")
+                return
+        elif target_response.text:
+            raw_text = target_response.text
+        elif target_response.caption:
+            raw_text = target_response.caption
 
-        # Aggressive Cleaning (Removing original credits)
-        raw_text = re.sub(r"@DuXxZx_info", "", raw_text, flags=re.IGNORECASE)
+        if not raw_text or len(raw_text.strip()) < 2:
+            await status_msg.edit("❌ **No Data Found**")
+            return
 
+        # --- 🔥 AGGRESSIVE CLEANING ---
+        raw_text = raw_text.replace(r"⚡ Designed & Powered by @DuXxZx\_info", "")
+        raw_text = raw_text.replace("⚡ Designed & Powered by @DuXxZx_info", "")
+        raw_text = raw_text.replace(r"@DuXxZx\_info", "").replace("@DuXxZx_info", "")
+        raw_text = raw_text.replace("====================\n\n", "====================\n")
+
+        # JSON Parsing
+        final_output = raw_text 
+        try:
+            clean_text = raw_text.replace("```json", "").replace("```", "").strip()
+            json_match = re.search(r'\{.*\}', clean_text, re.DOTALL)
+
+            if json_match:
+                parsed_data = json.loads(json_match.group(0))
+                results = []
+                if "data" in parsed_data:
+                    data_part = parsed_data["data"]
+                    if isinstance(data_part, list) and len(data_part) > 0:
+                        if "results" in data_part[0]:
+                            results = data_part[0]["results"]
+                        else:
+                            results = data_part
+                    elif isinstance(data_part, dict):
+                        if "results" in data_part:
+                            results = data_part["results"]
+                        else:
+                            results = [data_part]
+                elif "results" in parsed_data:
+                    results = parsed_data["results"]
+                else:
+                    results = parsed_data
+
+                final_output = json.dumps(results, indent=4, ensure_ascii=False)
+        except Exception:
+            pass
+
+        # --- SENDING RESULT (NO FOOTER, NO AUTO DELETE) ---
+        formatted_msg = f"```json\n{final_output}\n```"
         await status_msg.delete()
-        await message.reply_text(f"```json\n{raw_text[:4000]}\n```")
+
+        if len(formatted_msg) > 4000:
+            chunks = [formatted_msg[i:i+4000] for i in range(0, len(formatted_msg), 4000)]
+            for chunk in chunks:
+                await message.reply_text(chunk)
+                await asyncio.sleep(1) 
+        else:
+            await message.reply_text(formatted_msg)
 
     except Exception as e:
-        logger.error(f"Main logic error: {e}")
+        try:
+            await status_msg.edit(f"❌ **Error:** {str(e)}")
+        except:
+            pass
 
 # --- START SERVER & BOT ---
 async def start_bot():
+    print("🚀 Starting Web Server...")
     keep_alive() 
+    print("🚀 Starting Pyrogram Client...")
     await app.start()
-    print("✅ Gourisen OSINT Bot is Online (Whitelist Active)!")
+    print("✅ Gourisen OSINT Bot is Online (Restricted Mode)!")
     await idle()
     await app.stop()
 
