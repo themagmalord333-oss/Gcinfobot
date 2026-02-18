@@ -1,25 +1,26 @@
 import os
 import asyncio
 import logging
+
+# --- ⚠️ CRITICAL FIX FOR RENDER / PYTHON 3.14 ---
+# Hum check nahi karenge, seedha naya loop banayenge.
+# Ye line Pyrogram import hone se PEHLE honi chahiye.
+loop = asyncio.new_event_loop()
+asyncio.set_event_loop(loop)
+
+# --- AB BAKI IMPORTS KAREIN ---
 import json
 import re
 from threading import Thread
 from flask import Flask
 from pyrogram import Client, filters, idle
-from pyrogram.errors import PeerIdInvalid, UsernameInvalid
+from pyrogram.errors import PeerIdInvalid
 
-# --- ⚠️ CRITICAL FIX FOR PYTHON 3.10+ / 3.14 (MUST BE TOP) ---
-try:
-    asyncio.get_event_loop()
-except RuntimeError:
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-
-# --- LOGGING ---
+# --- LOGGING SETUP ---
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# --- AUTHENTICATION (WHITELIST) ---
+# --- AUTHENTICATION ---
 OWNER_ID = 7762163050
 ADMIN_ID = 7727470646
 AUTHORIZED_USERS = {OWNER_ID, ADMIN_ID}
@@ -27,7 +28,7 @@ AUTHORIZED_USERS = {OWNER_ID, ADMIN_ID}
 def is_authorized(user_id):
     return user_id in AUTHORIZED_USERS
 
-# --- WEB SERVER ---
+# --- WEB SERVER (Render Ke Liye) ---
 web_app = Flask(__name__)
 
 @web_app.route('/')
@@ -73,7 +74,7 @@ async def unauth_user(client, message):
             await message.reply(f"🚫 User `{uid}` Removed.")
     except: await message.reply("❌ Invalid ID")
 
-# --- 🆕 FEATURE: /id (Get User ID) ---
+# --- 🆕 FEATURE: /id ---
 @app.on_message(filters.command("id") & (filters.private | filters.group))
 async def get_id(client, message):
     if not is_authorized(message.from_user.id): return
@@ -86,7 +87,7 @@ async def get_id(client, message):
     except Exception as e:
         await status.edit(f"❌ **Error:** {e}")
 
-# --- 🆕 FEATURE: /tg (Lookup + Limit Check) ---
+# --- 🆕 FEATURE: /tg ---
 @app.on_message(filters.command("tg") & (filters.private | filters.group))
 async def tg_lookup(client, message):
     if not is_authorized(message.from_user.id): return
@@ -98,11 +99,9 @@ async def tg_lookup(client, message):
     status = await message.reply(f"🔍 **Searching ID {uid}...**")
     
     try:
-        # Send query to @Jhsgdysgshbot
         sent = await client.send_message(TG_LOOKUP_BOT, f"tg{uid}")
         target_response = None
 
-        # Wait Loop
         for _ in range(25):
             await asyncio.sleep(2)
             async for log in client.get_chat_history(TG_LOOKUP_BOT, limit=1):
@@ -110,12 +109,10 @@ async def tg_lookup(client, message):
                 
                 txt = (log.text or log.caption or "").lower()
                 
-                # 1. CHECK FOR LIMIT REACHED
                 if "лимит" in txt or "limit" in txt:
                     await status.delete()
                     return await message.reply("⚠️ **Bro Limit Reach**")
 
-                # 2. CHECK FOR SUCCESS (Phone/Tele)
                 if "телефон" in txt or "phone" in txt:
                     target_response = log
                     break
@@ -125,14 +122,13 @@ async def tg_lookup(client, message):
             await status.edit("❌ **No Data Found**")
             return
 
-        # EXTRACT PHONE ONLY
         full_text = target_response.text or target_response.caption or ""
         match = re.search(r"(?:Телефон|Phone):\s*([0-9+]+)", full_text)
 
         if match:
             await status.edit(f"📞 **Phone Number:** `{match.group(1)}`")
         else:
-            await status.edit("❌ **No Data Found** (No number in result)")
+            await status.edit("❌ **No Data Found**")
 
     except Exception as e:
         await status.edit(f"❌ Error: {e}")
@@ -150,16 +146,15 @@ async def dashboard(client, message):
         "📨 `/sms`\n\n"
         "🆕 **New Tools:**\n"
         "👤 `/id [user]` - Get User ID\n"
-        "🤖 `/tg [id]` - TG Lookup (Phone Only)\n"
+        "🤖 `/tg [id]` - TG Lookup\n"
         "━━━━━━━━━━━━━━━━━━"
     )
     await message.reply(text)
 
-# --- MAIN SEARCH (ALL COMMANDS RESTORED) ---
+# --- MAIN SEARCH ---
 @app.on_message(filters.command(["num", "vehicle", "aadhar", "familyinfo", "vnum", "fam", "sms"]))
 async def main_process(client, message):
     if not is_authorized(message.from_user.id): return
-
     if len(message.command) < 2:
         return await message.reply(f"❌ **Missing Data!**\nUsage: `/{message.command[0]} <value>`")
 
@@ -169,7 +164,6 @@ async def main_process(client, message):
         sent = await client.send_message(MAIN_SOURCE_BOT, message.text)
         target_response = None
 
-        # --- SMART WAIT LOOP ---
         for attempt in range(30):
             await asyncio.sleep(2)
             async for log in client.get_chat_history(MAIN_SOURCE_BOT, limit=1):
@@ -178,7 +172,6 @@ async def main_process(client, message):
                 text_content = (log.text or log.caption or "").lower()
                 ignore_words = ["wait", "processing", "searching", "scanning", "generating", "loading"]
                 
-                # Skip waiting messages
                 if any(w in text_content for w in ignore_words) and not log.document:
                     if attempt % 5 == 0: await status.edit(f"⏳ **Fetching... ({attempt})**")
                     continue
@@ -191,7 +184,6 @@ async def main_process(client, message):
             await status.edit("❌ **No Data Found**")
             return
 
-        # --- FULL FILE & TEXT HANDLING ---
         raw_text = ""
         if target_response.document:
             await status.edit("📂 **Downloading File...**")
@@ -208,11 +200,9 @@ async def main_process(client, message):
         if len(raw_text) < 2:
             return await status.edit("❌ **No Data Found**")
 
-        # --- CLEANING ---
         raw_text = raw_text.replace(r"⚡ Designed & Powered by @DuXxZx\_info", "")
         raw_text = raw_text.replace("@DuXxZx_info", "")
         
-        # JSON PARSING
         final_output = raw_text
         try:
             clean = raw_text.replace("```json", "").replace("```", "").strip()
@@ -220,7 +210,6 @@ async def main_process(client, message):
                 match = re.search(r'\{.*\}', clean, re.DOTALL)
                 if match:
                     data = json.loads(match.group(0))
-                    # Extract logic
                     if "data" in data: data = data["data"]
                     if isinstance(data, list) and len(data) > 0 and "results" in data[0]:
                         data = data[0]["results"]
@@ -230,7 +219,6 @@ async def main_process(client, message):
                     final_output = json.dumps(data, indent=4, ensure_ascii=False)
         except: pass
 
-        # --- SENDING ---
         msg = f"```json\n{final_output}\n```"
         await status.delete()
 
@@ -256,5 +244,5 @@ async def start_bot():
     await app.stop()
 
 if __name__ == "__main__":
-    loop = asyncio.get_event_loop()
+    # Is baar hum naye banaye hue loop ko use karenge
     loop.run_until_complete(start_bot())
