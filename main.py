@@ -1,37 +1,33 @@
 import os
 import asyncio
 import logging
+import json
+import re
+from threading import Thread
+from flask import Flask
+from pyrogram import Client, filters, idle
+from pyrogram.errors import PeerIdInvalid, UsernameInvalid
 
-# --- ⚠️ CRITICAL FIX FOR PYTHON 3.10+ / 3.14 (MUST BE AT THE TOP) ---
+# --- ⚠️ CRITICAL FIX FOR PYTHON 3.10+ / 3.14 (MUST BE TOP) ---
 try:
     asyncio.get_event_loop()
 except RuntimeError:
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
 
-# --- NOW IMPORT EVERYTHING ELSE ---
-import json
-import re
-from threading import Thread
-from flask import Flask
-from pyrogram import Client, filters, idle
-from pyrogram.errors import PeerIdInvalid
-
-# --- LOGGING SETUP ---
+# --- LOGGING ---
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# --- AUTHENTICATION CONFIG (WHITELIST SYSTEM) ---
+# --- AUTHENTICATION (WHITELIST) ---
 OWNER_ID = 7762163050
 ADMIN_ID = 7727470646
-
-# Ye Set RAM mein rahega (Restart hone par reset ho jayega)
 AUTHORIZED_USERS = {OWNER_ID, ADMIN_ID}
 
 def is_authorized(user_id):
     return user_id in AUTHORIZED_USERS
 
-# --- FAKE WEBSITE FOR RENDER ---
+# --- WEB SERVER ---
 web_app = Flask(__name__)
 
 @web_app.route('/')
@@ -51,200 +47,211 @@ def keep_alive():
 API_ID = 37314366
 API_HASH = "bd4c934697e7e91942ac911a5a287b46"
 SESSION_STRING = "BQI5Xz4AYmk4kg6TAh1_7Ebt65uwpCt5ryzpfEb-DlJ-hwhK2OuYoKI9Rboc391MVc-TRBHL_eQkMYyl1WVuKq9po2r6RKIJBLPf9vzO7_fWiDSz0tC1XUDFFvX1PrmUFls8cZgJWg1TZx6EOYhlTMnXhhWfBOnHXb5orXyFlRd5sxrXCC-A-kEnmtfAi1UGuX4tgzUplpgYDQHS1lQK-vPExaML7FajZfsasoIXvOFWRndMSY3qOqhSqm-ZLIhRhaVa333weGM8z4hQqE9iuvsYFr4wwwAnYaRRSBob8MfIN5tGSyZpbT-6iOZTyx7ttqTh6mKqn0JatY3Lk1n6P7ulu3Pv_gAAAAFJSgVkAA"
-TARGET_BOT = "Random_insight69_bot"
+
+MAIN_SOURCE_BOT = "Random_insight69_bot"
+TG_LOOKUP_BOT = "Jhsgdysgshbot"
 
 app = Client("gourisen_osint_bot", api_id=API_ID, api_hash=API_HASH, session_string=SESSION_STRING)
 
-# --- 🔐 PERMISSION COMMANDS (OWNER ONLY) ---
+# --- 🔐 PERMISSION COMMANDS ---
 @app.on_message(filters.command("auth") & filters.user(OWNER_ID))
 async def auth_user(client, message):
-    if len(message.command) < 2:
-        return await message.reply_text("ℹ️ **Usage:** `/auth [User_ID]`")
+    if len(message.command) < 2: return await message.reply("ℹ️ Usage: `/auth [ID]`")
     try:
         uid = int(message.command[1])
         AUTHORIZED_USERS.add(uid)
-        await message.reply_text(f"✅ User `{uid}` is now Authorized!")
-    except:
-        await message.reply_text("❌ Invalid ID")
+        await message.reply(f"✅ User `{uid}` Authorized!")
+    except: await message.reply("❌ Invalid ID")
 
 @app.on_message(filters.command("unauth") & filters.user(OWNER_ID))
 async def unauth_user(client, message):
-    if len(message.command) < 2:
-        return await message.reply_text("ℹ️ **Usage:** `/unauth [User_ID]`")
+    if len(message.command) < 2: return await message.reply("ℹ️ Usage: `/unauth [ID]`")
     try:
         uid = int(message.command[1])
         if uid in AUTHORIZED_USERS and uid != OWNER_ID:
             AUTHORIZED_USERS.remove(uid)
-            await message.reply_text(f"🚫 User `{uid}` Removed.")
-        else:
-            await message.reply_text("❌ Cannot remove Owner or User not found.")
-    except:
-        await message.reply_text("❌ Invalid ID")
+            await message.reply(f"🚫 User `{uid}` Removed.")
+    except: await message.reply("❌ Invalid ID")
 
-# --- DASHBOARD ---
-@app.on_message(filters.command(["start", "help", "menu"], prefixes="/") & (filters.private | filters.group))
-async def show_dashboard(client, message):
-    # SECURITY CHECK
-    if not is_authorized(message.from_user.id):
-        return
-
+# --- 🆕 FEATURE: /id (Get User ID) ---
+@app.on_message(filters.command("id") & (filters.private | filters.group))
+async def get_id(client, message):
+    if not is_authorized(message.from_user.id): return
+    if len(message.command) < 2: return await message.reply("ℹ️ Usage: `/id @username`")
+    
+    status = await message.reply("🔍 **Checking...**")
     try:
-        text = (
-            "📖 **Gourisen OSINT DASHBOARD**\n"
-            "━━━━━━━━━━━━━━━━━━\n\n"
-            "🔍 **Lookup Services:**\n"
-            "📱 `/num [number]`\n🚗 `/vehicle [plate]`\n🆔 `/aadhar [uid]`\n"
-            "👨‍👩‍👧‍👦 `/familyinfo [uid]`\n🔗 `/vnum [plate]`\n💸 `/fam [id]`\n📨 `/sms [number]`\n"
-            "━━━━━━━━━━━━━━━━━━"
-        )
-        await message.reply_text(text, disable_web_page_preview=True)
+        user = await client.get_users(message.command[1])
+        await status.edit(f"🆔 **ID:** `{user.id}`\n👤 **Name:** {user.first_name}")
     except Exception as e:
-        logger.error(f"Error in dashboard: {e}")
+        await status.edit(f"❌ **Error:** {e}")
 
-# --- MAIN LOGIC (FULL FEATURES RESTORED) ---
-@app.on_message(filters.command(["num", "vehicle", "aadhar", "familyinfo", "vnum", "fam", "sms"], prefixes="/") & (filters.private | filters.group))
-async def process_request(client, message):
-    # SECURITY CHECK
-    if not is_authorized(message.from_user.id):
-        return
+# --- 🆕 FEATURE: /tg (Lookup + Limit Check) ---
+@app.on_message(filters.command("tg") & (filters.private | filters.group))
+async def tg_lookup(client, message):
+    if not is_authorized(message.from_user.id): return
+    if len(message.command) < 2: return await message.reply("ℹ️ Usage: `/tg [UserID]`")
 
+    uid = message.command[1]
+    if not uid.isdigit(): return await message.reply("❌ Only Numeric IDs allowed.")
+
+    status = await message.reply(f"🔍 **Searching ID {uid}...**")
+    
     try:
-        if len(message.command) < 2:
-            return await message.reply_text(f"❌ **Data Missing!**\nUsage: `/{message.command[0]} <value>`")
+        # Send query to @Jhsgdysgshbot
+        sent = await client.send_message(TG_LOOKUP_BOT, f"tg{uid}")
+        target_response = None
 
-        status_msg = await message.reply_text(f"🔍 **Searching via Gourisen OSINT...**")
+        # Wait Loop
+        for _ in range(25):
+            await asyncio.sleep(2)
+            async for log in client.get_chat_history(TG_LOOKUP_BOT, limit=1):
+                if log.id == sent.id: continue
+                
+                txt = (log.text or log.caption or "").lower()
+                
+                # 1. CHECK FOR LIMIT REACHED
+                if "лимит" in txt or "limit" in txt:
+                    await status.delete()
+                    return await message.reply("⚠️ **Bro Limit Reach**")
 
-        try:
-            sent_req = await client.send_message(TARGET_BOT, message.text)
-        except PeerIdInvalid:
-             await status_msg.edit("❌ **Error:** Target Bot ID invalid. Userbot must start @Random_insight69_bot first.")
-             return
-        except Exception as e:
-            await status_msg.edit(f"❌ **Request Error:** {e}")
+                # 2. CHECK FOR SUCCESS (Phone/Tele)
+                if "телефон" in txt or "phone" in txt:
+                    target_response = log
+                    break
+            if target_response: break
+        
+        if not target_response:
+            await status.edit("❌ **No Data Found**")
             return
 
+        # EXTRACT PHONE ONLY
+        full_text = target_response.text or target_response.caption or ""
+        match = re.search(r"(?:Телефон|Phone):\s*([0-9+]+)", full_text)
+
+        if match:
+            await status.edit(f"📞 **Phone Number:** `{match.group(1)}`")
+        else:
+            await status.edit("❌ **No Data Found** (No number in result)")
+
+    except Exception as e:
+        await status.edit(f"❌ Error: {e}")
+
+# --- DASHBOARD ---
+@app.on_message(filters.command(["start", "help", "menu"]))
+async def dashboard(client, message):
+    if not is_authorized(message.from_user.id): return
+    text = (
+        "📖 **Gourisen OSINT DASHBOARD**\n"
+        "━━━━━━━━━━━━━━━━━━\n\n"
+        "🔍 **Lookup Services:**\n"
+        "📱 `/num`  🚗 `/vehicle`  🆔 `/aadhar`\n"
+        "👨‍👩‍👧‍👦 `/familyinfo`  🔗 `/vnum`  💸 `/fam`\n"
+        "📨 `/sms`\n\n"
+        "🆕 **New Tools:**\n"
+        "👤 `/id [user]` - Get User ID\n"
+        "🤖 `/tg [id]` - TG Lookup (Phone Only)\n"
+        "━━━━━━━━━━━━━━━━━━"
+    )
+    await message.reply(text)
+
+# --- MAIN SEARCH (ALL COMMANDS RESTORED) ---
+@app.on_message(filters.command(["num", "vehicle", "aadhar", "familyinfo", "vnum", "fam", "sms"]))
+async def main_process(client, message):
+    if not is_authorized(message.from_user.id): return
+
+    if len(message.command) < 2:
+        return await message.reply(f"❌ **Missing Data!**\nUsage: `/{message.command[0]} <value>`")
+
+    status = await message.reply("🔍 **Searching via Gourisen OSINT...**")
+
+    try:
+        sent = await client.send_message(MAIN_SOURCE_BOT, message.text)
         target_response = None
 
         # --- SMART WAIT LOOP ---
-        for attempt in range(30): 
-            await asyncio.sleep(2) 
-            try:
-                async for log in client.get_chat_history(TARGET_BOT, limit=1):
-                    if log.id == sent_req.id: continue
+        for attempt in range(30):
+            await asyncio.sleep(2)
+            async for log in client.get_chat_history(MAIN_SOURCE_BOT, limit=1):
+                if log.id == sent.id: continue
 
-                    text_content = (log.text or log.caption or "").lower()
-
-                    ignore_words = [
-                        "wait", "processing", "searching", "scanning", 
-                        "generating", "loading", "checking", 
-                        "looking up", "uploading", "sending file", 
-                        "attaching", "sending"
-                    ]
-
-                    if any(word in text_content for word in ignore_words) and not log.document:
-                        if f"Attempt {attempt+1}" not in status_msg.text:
-                            await status_msg.edit(f"⏳ **Fetching Data... (Attempt {attempt+1})**")
-                        continue 
-
-                    if log.document or "{" in text_content or "success" in text_content:
-                        target_response = log
-                        break
-                    
-                    # Agar upar wale condition match nahi hue but naya message hai
-                    target_response = log
-                    break
-
-            except Exception as e:
-                logger.error(f"Error fetching history: {e}")
-
+                text_content = (log.text or log.caption or "").lower()
+                ignore_words = ["wait", "processing", "searching", "scanning", "generating", "loading"]
+                
+                # Skip waiting messages
+                if any(w in text_content for w in ignore_words) and not log.document:
+                    if attempt % 5 == 0: await status.edit(f"⏳ **Fetching... ({attempt})**")
+                    continue
+                
+                target_response = log
+                break
             if target_response: break
 
         if not target_response:
-            await status_msg.edit("❌ **No Data Found**")
+            await status.edit("❌ **No Data Found**")
             return
 
-        # --- DATA HANDLING ---
+        # --- FULL FILE & TEXT HANDLING ---
         raw_text = ""
         if target_response.document:
-            await status_msg.edit("📂 **Downloading Result File...**")
+            await status.edit("📂 **Downloading File...**")
             try:
-                file_path = await client.download_media(target_response)
-                with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                path = await client.download_media(target_response)
+                with open(path, 'r', encoding='utf-8', errors='ignore') as f:
                     raw_text = f.read()
-                os.remove(file_path)
+                os.remove(path)
             except Exception as e:
-                await status_msg.edit(f"❌ **File Error:** {e}")
-                return
-        elif target_response.text:
-            raw_text = target_response.text
-        elif target_response.caption:
-            raw_text = target_response.caption
-
-        if not raw_text or len(raw_text.strip()) < 2:
-            await status_msg.edit("❌ **No Data Found**")
-            return
-
-        # --- 🔥 AGGRESSIVE CLEANING ---
-        raw_text = raw_text.replace(r"⚡ Designed & Powered by @DuXxZx\_info", "")
-        raw_text = raw_text.replace("⚡ Designed & Powered by @DuXxZx_info", "")
-        raw_text = raw_text.replace(r"@DuXxZx\_info", "").replace("@DuXxZx_info", "")
-        raw_text = raw_text.replace("====================\n\n", "====================\n")
-
-        # JSON Parsing
-        final_output = raw_text 
-        try:
-            clean_text = raw_text.replace("```json", "").replace("```", "").strip()
-            json_match = re.search(r'\{.*\}', clean_text, re.DOTALL)
-
-            if json_match:
-                parsed_data = json.loads(json_match.group(0))
-                results = []
-                if "data" in parsed_data:
-                    data_part = parsed_data["data"]
-                    if isinstance(data_part, list) and len(data_part) > 0:
-                        if "results" in data_part[0]:
-                            results = data_part[0]["results"]
-                        else:
-                            results = data_part
-                    elif isinstance(data_part, dict):
-                        if "results" in data_part:
-                            results = data_part["results"]
-                        else:
-                            results = [data_part]
-                elif "results" in parsed_data:
-                    results = parsed_data["results"]
-                else:
-                    results = parsed_data
-
-                final_output = json.dumps(results, indent=4, ensure_ascii=False)
-        except Exception:
-            pass
-
-        # --- SENDING RESULT (NO FOOTER, NO AUTO DELETE) ---
-        formatted_msg = f"```json\n{final_output}\n```"
-        await status_msg.delete()
-
-        if len(formatted_msg) > 4000:
-            chunks = [formatted_msg[i:i+4000] for i in range(0, len(formatted_msg), 4000)]
-            for chunk in chunks:
-                await message.reply_text(chunk)
-                await asyncio.sleep(1) 
+                return await status.edit(f"❌ File Error: {e}")
         else:
-            await message.reply_text(formatted_msg)
+            raw_text = target_response.text or target_response.caption or ""
+
+        if len(raw_text) < 2:
+            return await status.edit("❌ **No Data Found**")
+
+        # --- CLEANING ---
+        raw_text = raw_text.replace(r"⚡ Designed & Powered by @DuXxZx\_info", "")
+        raw_text = raw_text.replace("@DuXxZx_info", "")
+        
+        # JSON PARSING
+        final_output = raw_text
+        try:
+            clean = raw_text.replace("```json", "").replace("```", "").strip()
+            if "{" in clean:
+                match = re.search(r'\{.*\}', clean, re.DOTALL)
+                if match:
+                    data = json.loads(match.group(0))
+                    # Extract logic
+                    if "data" in data: data = data["data"]
+                    if isinstance(data, list) and len(data) > 0 and "results" in data[0]:
+                        data = data[0]["results"]
+                    elif isinstance(data, dict) and "results" in data:
+                        data = data["results"]
+                    
+                    final_output = json.dumps(data, indent=4, ensure_ascii=False)
+        except: pass
+
+        # --- SENDING ---
+        msg = f"```json\n{final_output}\n```"
+        await status.delete()
+
+        if len(msg) > 4000:
+            for x in range(0, len(msg), 4000):
+                await message.reply(msg[x:x+4000])
+                await asyncio.sleep(1)
+        else:
+            await message.reply(msg)
 
     except Exception as e:
-        try:
-            await status_msg.edit(f"❌ **Error:** {str(e)}")
-        except:
-            pass
+        try: await status.edit(f"❌ Error: {e}")
+        except: pass
 
-# --- START SERVER & BOT ---
+# --- START ---
 async def start_bot():
     print("🚀 Starting Web Server...")
-    keep_alive() 
-    print("🚀 Starting Pyrogram Client...")
+    keep_alive()
+    print("🚀 Starting Bot...")
     await app.start()
-    print("✅ Gourisen OSINT Bot is Online (Restricted Mode)!")
+    print("✅ Gourisen OSINT Bot is Online!")
     await idle()
     await app.stop()
 
