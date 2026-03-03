@@ -1,4 +1,9 @@
+# --- 🛑 SABSE PEHLE EVENT LOOP BANAO (CRITICAL FIX) 🛑 ---
 import asyncio
+loop = asyncio.new_event_loop()
+asyncio.set_event_loop(loop)
+
+# --- AB BAAKI SAB IMPORT KARO ---
 import os
 import logging
 import json
@@ -6,17 +11,6 @@ import re
 from threading import Thread
 from flask import Flask
 from pyrogram import Client, filters, idle
-
-# --- 🔥 CRITICAL FORCE-PATCH FOR PYTHON 3.14 ON RENDER 🔥 ---
-def get_or_create_loop():
-    try:
-        return asyncio.get_running_loop()
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        return loop
-
-asyncio.get_event_loop = get_or_create_loop
 
 # --- LOGGING SETUP ---
 logging.basicConfig(level=logging.INFO)
@@ -93,19 +87,15 @@ async def start_cmd(client, message):
 # --- MAIN LOOKUP LOGIC ---
 @app.on_message(filters.command(["num", "vehicle", "aadhar", "familyinfo", "vnum", "tgnum", "fam", "sms"], prefixes=["/", ".", "!"]) & filters.private)
 async def process_lookup(client, message):
-    # 1. Sabse pehle access check karo
     if message.from_user.id not in AUTHORIZED_USERS:
         return await message.reply_text("🚫 **Access Denied.**\nAapko command use karne ki permission nahi hai.")
 
-    # 2. Check agar input value miss hai
     if len(message.command) < 2:
         return await message.reply_text(f"❌ **Data missing!**\nSahi format use karein: `/{message.command[0]} [value]`")
 
-    # 3. Yahan se bot response dena shuru karega
     status = await message.reply_text("🔍 **Fetching Details... Please wait.**")
     
     try:
-        # User ki request target bot ko bhejna
         try:
             sent_req = await client.send_message(TARGET_BOT, message.text)
         except Exception as e:
@@ -113,15 +103,12 @@ async def process_lookup(client, message):
         
         target_response = None
         
-        # 60 Seconds Timeout (Wait for ACTUAL response)
         for _ in range(30): 
             await asyncio.sleep(2)
             async for log in client.get_chat_history(TARGET_BOT, limit=3):
-                # Target bot ka reply aapki bheji hui request ke baad aana chahiye
                 if log.id > sent_req.id:
                     text_content = (log.text or log.caption or "").lower()
                     
-                    # Target bot ka 'processing' wala faaltu message ignore karo
                     ignore_words = ["wait", "searching", "processing", "loading", "fetching", "scanning"]
                     if any(word in text_content for word in ignore_words) and not log.document:
                         continue 
@@ -133,7 +120,6 @@ async def process_lookup(client, message):
         if not target_response:
             return await status.edit("❌ **Timeout:** Target bot ne time par result nahi diya. Phir se try karein.")
 
-        # Handle File or Text Result
         raw_text = ""
         if target_response.document:
             await status.edit("📂 **Downloading Result File...**")
@@ -147,10 +133,8 @@ async def process_lookup(client, message):
         if not raw_text or len(raw_text.strip()) < 2:
             return await status.edit("❌ **No Data Found or Invalid Data.**")
 
-        # Code ko clean karna
         clean_output = re.sub(r"⚡ Designed.*|@\w+", "", raw_text).strip()
         
-        # Output ko sundar format mein bhejna
         if "{" in clean_output:
             final_msg = f"```json\n{clean_output}\n```\n\n⚡ **{BOT_NAME}**"
         else:
@@ -158,7 +142,6 @@ async def process_lookup(client, message):
         
         await status.delete()
         
-        # Result lambe hone par split karke bhejna aur auto-delete karna (60 seconds)
         if len(final_msg) > 4000:
             sent_msgs = []
             for i in range(0, len(final_msg), 4000):
@@ -190,5 +173,5 @@ async def main():
     await idle()
 
 if __name__ == "__main__":
-    loop = asyncio.get_event_loop()
+    # Yahan ab purana function nahi maang rahe, sidha loop chalayenge
     loop.run_until_complete(main())
