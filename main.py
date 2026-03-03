@@ -5,77 +5,134 @@ import json
 import re
 from threading import Thread
 from flask import Flask
-from pyrogram import Client, filters, idle
+from pyrogram import Client, filters, enums, idle
+from pyrogram.errors import UserNotParticipant, PeerIdInvalid, ChannelInvalid
 
-# --- RENDER PORT BINDING ---
+# --- ⚠️ ASYNCIO EVENT LOOP FIX ---
+try:
+    asyncio.get_event_loop()
+except RuntimeError:
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+
+# --- LOGGING ---
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# --- WEB SERVER (FOR RENDER/UPTIME) ---
 web_app = Flask(__name__)
 @web_app.route('/')
-def home(): return "VIP BLUE HAT IS RUNNING ⚡"
+def home(): return "🤖 VIP BLUE HAT NETWORK is Running!"
 
 def run_web():
     port = int(os.environ.get("PORT", 8080))
     web_app.run(host="0.0.0.0", port=port)
 
-# --- BOT CONFIG ---
+# --- CONFIGURATION ---
 API_ID = 37314366
 API_HASH = "bd4c934697e7e91942ac911a5a287b46"
 SESSION_STRING = "BQI5Xz4AlbuU3B5b_1PGYQuKw8hHzdc--FupA_5OTNcfpP0x_N-lTGTWVLbCbAyWVNTog5wIynXUFTi9VcsMw3FqX40tzuK7RnLT32Rcw6mdRKfZ3Dnl903ZU-4wVi_EgnE006uHqnoQjzzwlYqAr7N8dvgfDhn4-vTTj-Pvm9tTobzToT_utoHpsV1KrVVjwYNTGIqPbURAcXtrJIIN_JIcCnMoklpe3WdMAF0w-7TEOxpa9RFM-zyVafqKb1OoGGacq-B6jTNDzCtbv7Tz__dNlYkLtVwMaVE_vnOjZjECIT9Sxsc067edG9d6iXr4G0u_wcC4BR7ZpGrf1UHAp8ErefHs0wAAAAFJSgVkAA"
 
-MAIN_SOURCE_BOT = "Backupinfo69_bot"
+TARGET_BOT = "Backupinfo69_bot"
+BOT_NAME = "vipbluehatnetwork"
+
 OWNER_ID = 7762163050
 ADMIN_ID = 7727470646
-AUTHORIZED_USERS = {OWNER_ID, ADMIN_ID}
+
+# List to store authorized user IDs
+AUTHORIZED_USERS = [OWNER_ID, ADMIN_ID]
 
 app = Client("vip_blue_hat", api_id=API_ID, api_hash=API_HASH, session_string=SESSION_STRING)
 
-# --- UTILS ---
-def is_auth(uid): return uid in AUTHORIZED_USERS
+# --- ACCESS CONTROL FILTER ---
+async def is_authorized(_, __, message):
+    if not message.from_user: return False
+    return message.from_user.id in AUTHORIZED_USERS
 
-# --- COMMANDS ---
-@app.on_message(filters.command(["start", "help"]))
-async def start(c, m):
-    if not is_auth(m.from_user.id): return
-    await m.reply("💙 **VIP BLUE HAT NETWORK**\n━━━━━━━━━━━━━━\nCommands: `/num`, `/Aadhar`, `/Familyinfo`, `/Pan`, `/Vehicle`, `/Vnum`, `/tgnum`")
+auth_filter = filters.create(is_authorized)
 
-@app.on_message(filters.command(["num", "Aadhar", "Familyinfo", "Pan", "Vehicle", "Vnum", "tgnum"]))
-async def osint_handler(c, m):
-    if not is_auth(m.from_user.id): return
-    if len(m.command) < 2: return await m.reply(f"ℹ️ Usage: `/{m.command[0]} <value>`")
+# --- COMMAND: AUTHENTICATE USER ---
+@app.on_message(filters.command("auth") & filters.user([OWNER_ID, ADMIN_ID]))
+async def authorize_user(client, message):
+    if len(message.command) < 2:
+        return await message.reply_text("❌ Usage: `/auth [User_ID]`")
+    try:
+        user_id = int(message.command[1])
+        if user_id not in AUTHORIZED_USERS:
+            AUTHORIZED_USERS.append(user_id)
+            await message.reply_text(f"✅ User `{user_id}` has been authorized.")
+        else:
+            await message.reply_text("User is already authorized.")
+    except ValueError:
+        await message.reply_text("Invalid User ID.")
 
-    # Mapping /tgnum to /tg for the source bot
-    cmd = m.command[0].lower()
-    val = m.command[1]
-    query = f"/tg {val}" if cmd == "tgnum" else f"/{cmd} {val}"
+# --- DASHBOARD / START ---
+@app.on_message(filters.command("start") & filters.private)
+async def start_cmd(client, message):
+    if message.from_user.id not in AUTHORIZED_USERS:
+        return await message.reply_text("🚫 **Access Denied.**\nContact Admin or Owner for permission.")
+    
+    await message.reply_text(
+        f"🛡️ **Welcome to {BOT_NAME}**\n\n"
+        "Send lookup commands like:\n"
+        "`/num [number]`\n`/vehicle [plate]`\n`/aadhar [uid]`"
+    )
 
-    status = await m.reply("🔎 **Searching...**")
+# --- MAIN LOOKUP LOGIC ---
+@app.on_message(filters.command(["num", "vehicle", "aadhar", "familyinfo", "vnum", "fam", "sms"]) & filters.private & auth_filter)
+async def process_lookup(client, message):
+    if len(message.command) < 2:
+        return await message.reply_text("❌ Data missing!")
+
+    status = await message.reply_text("🔍 **Searching Data...**")
     
     try:
-        sent = await c.send_message(MAIN_SOURCE_BOT, query)
+        # Forward request to target bot
+        sent_req = await client.send_message(TARGET_BOT, message.text)
         
-        # Wait for 30 seconds max
-        for _ in range(15):
+        target_response = None
+        for _ in range(20): # 40 seconds timeout
             await asyncio.sleep(2)
-            async for msg in c.get_chat_history(MAIN_SOURCE_BOT, limit=3):
-                if msg.id <= sent.id: continue
-                
-                text = (msg.text or msg.caption or "").lower()
-                if any(w in text for w in ["wait", "process", "search"]): continue
+            async for log in client.get_chat_history(TARGET_BOT, limit=1):
+                if log.id != sent_req.id:
+                    target_response = log
+                    break
+            if target_response: break
 
-                # Got result
-                if msg.document:
-                    file = await c.download_media(msg)
-                    with open(file, 'r', encoding='utf-8', errors='ignore') as f:
-                        data = f.read()
-                    os.remove(file)
-                    await status.edit(f"```json\n{data[:3900]}\n```")
-                else:
-                    await status.edit(f"```json\n{(msg.text or msg.caption)[:3900]}\n```")
-                return
-        await status.edit("❌ No Response from Source.")
+        if not target_response:
+            return await status.edit("❌ No response from target.")
+
+        # Handle File or Text
+        raw_text = ""
+        if target_response.document:
+            path = await client.download_media(target_response)
+            with open(path, 'r', encoding='utf-8', errors='ignore') as f:
+                raw_text = f.read()
+            os.remove(path)
+        else:
+            raw_text = target_response.text or target_response.caption or ""
+
+        # Remove old ads/credits from text
+        clean_output = re.sub(r"⚡ Designed.*|@\w+", "", raw_text).strip()
+
+        final_msg = f"```json\n{clean_output}\n```\n\n⚡ **{BOT_NAME}**"
+        
+        await status.delete()
+        sent = await message.reply_text(final_msg)
+        
+        # Auto delete result after 60 seconds
+        await asyncio.sleep(60)
+        await sent.delete()
+
     except Exception as e:
-        await status.edit(f"❌ Error: {e}")
+        await status.edit(f"❌ Error: {str(e)}")
 
-# --- RUN ---
-if __name__ == "__main__":
+# --- STARTUP ---
+async def main():
     Thread(target=run_web, daemon=True).start()
-    app.run()
+    await app.start()
+    print("✅ VIP BLUE HAT NETWORK IS ONLINE")
+    await idle()
+
+if __name__ == "__main__":
+    loop.run_until_complete(main())
