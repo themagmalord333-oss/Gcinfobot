@@ -1,4 +1,11 @@
 import asyncio
+import os
+import logging
+import json
+import re
+from threading import Thread
+from flask import Flask
+from pyrogram import Client, filters, idle
 
 # --- 🔥 CRITICAL FORCE-PATCH FOR PYTHON 3.14 ON RENDER 🔥 ---
 def get_or_create_loop():
@@ -11,16 +18,7 @@ def get_or_create_loop():
 
 asyncio.get_event_loop = get_or_create_loop
 
-# --- NOW IMPORT EVERYTHING ELSE ---
-import os
-import logging
-import json
-import re
-from threading import Thread
-from flask import Flask
-from pyrogram import Client, filters, idle
-
-# --- LOGGING ---
+# --- LOGGING SETUP ---
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -49,33 +47,35 @@ AUTHORIZED_USERS = [OWNER_ID, ADMIN_ID]
 
 app = Client("vip_blue_hat", api_id=API_ID, api_hash=API_HASH, session_string=SESSION_STRING)
 
-# --- ACCESS CONTROL FILTER ---
-async def is_authorized(_, __, message):
-    if not message.from_user: return False
-    return message.from_user.id in AUTHORIZED_USERS
-
-auth_filter = filters.create(is_authorized)
+# --- TEST COMMAND (BOT CHECK KARNE KE LIYE) ---
+@app.on_message(filters.command("ping", prefixes=["/", ".", "!"]) & filters.private)
+async def ping_cmd(client, message):
+    await message.reply_text("🏓 **Pong! Bot zinda hai aur response de raha hai!**")
 
 # --- COMMAND: AUTHENTICATE USER ---
-@app.on_message(filters.command("auth") & filters.user([OWNER_ID, ADMIN_ID]))
+@app.on_message(filters.command("auth", prefixes=["/", ".", "!"]) & filters.private)
 async def authorize_user(client, message):
+    if message.from_user.id not in [OWNER_ID, ADMIN_ID]:
+        return await message.reply_text("🚫 **Aap Owner ya Admin nahi hain!**")
+
     if len(message.command) < 2:
-        return await message.reply_text("❌ Usage: `/auth [User_ID]`")
+        return await message.reply_text("❌ **Format Galat Hai!**\nUse: `/auth [User_ID]`")
+    
     try:
         user_id = int(message.command[1])
         if user_id not in AUTHORIZED_USERS:
             AUTHORIZED_USERS.append(user_id)
-            await message.reply_text(f"✅ User `{user_id}` has been authorized.")
+            await message.reply_text(f"✅ User `{user_id}` ko successfully permission mil gayi hai.")
         else:
-            await message.reply_text("ℹ️ User is already authorized.")
+            await message.reply_text("ℹ️ Ye User pehle se authorized hai.")
     except ValueError:
-        await message.reply_text("❌ Invalid User ID.")
+        await message.reply_text("❌ **Invalid User ID!** Sirf numbers daalein.")
 
 # --- DASHBOARD / START ---
-@app.on_message(filters.command("start") & filters.private)
+@app.on_message(filters.command(["start", "help", "menu"], prefixes=["/", ".", "!"]) & filters.private)
 async def start_cmd(client, message):
     if message.from_user.id not in AUTHORIZED_USERS:
-        return await message.reply_text("🚫 **Access Denied.**\nContact Admin or Owner for permission.")
+        return await message.reply_text("🚫 **Access Denied.**\nIse use karne ke liye Admin ya Owner se permission lein.")
     
     text = (
         f"🛡️ **Welcome to {BOT_NAME}**\n\n"
@@ -91,29 +91,39 @@ async def start_cmd(client, message):
     await message.reply_text(text)
 
 # --- MAIN LOOKUP LOGIC ---
-@app.on_message(filters.command(["num", "vehicle", "aadhar", "familyinfo", "vnum", "tgnum"]) & filters.private & auth_filter)
+@app.on_message(filters.command(["num", "vehicle", "aadhar", "familyinfo", "vnum", "tgnum", "fam", "sms"], prefixes=["/", ".", "!"]) & filters.private)
 async def process_lookup(client, message):
+    # 1. Sabse pehle access check karo
+    if message.from_user.id not in AUTHORIZED_USERS:
+        return await message.reply_text("🚫 **Access Denied.**\nAapko command use karne ki permission nahi hai.")
+
+    # 2. Check agar input value miss hai
     if len(message.command) < 2:
         return await message.reply_text(f"❌ **Data missing!**\nSahi format use karein: `/{message.command[0]} [value]`")
 
+    # 3. Yahan se bot response dena shuru karega
     status = await message.reply_text("🔍 **Fetching Details... Please wait.**")
     
     try:
-        # Forward request to target bot
-        sent_req = await client.send_message(TARGET_BOT, message.text)
+        # User ki request target bot ko bhejna
+        try:
+            sent_req = await client.send_message(TARGET_BOT, message.text)
+        except Exception as e:
+            return await status.edit(f"❌ **Target Bot Error:** Pata lagao ki kya aapne target bot ko kabhi /start kiya hai ya nahi.\nError: {e}")
         
         target_response = None
         
-        # SMART WAIT LOOP: 60 Seconds Timeout (Wait for ACTUAL response)
+        # 60 Seconds Timeout (Wait for ACTUAL response)
         for _ in range(30): 
             await asyncio.sleep(2)
-            async for log in client.get_chat_history(TARGET_BOT, limit=2):
-                # Check if message is from Target Bot and newer than our request
-                if not log.from_user.is_self and log.id > sent_req.id:
+            async for log in client.get_chat_history(TARGET_BOT, limit=3):
+                # Target bot ka reply aapki bheji hui request ke baad aana chahiye
+                if log.id > sent_req.id:
                     text_content = (log.text or log.caption or "").lower()
                     
-                    # Ignore "Processing" messages sent by the target bot
-                    if any(word in text_content for word in ["wait", "searching", "processing", "loading"]):
+                    # Target bot ka 'processing' wala faaltu message ignore karo
+                    ignore_words = ["wait", "searching", "processing", "loading", "fetching", "scanning"]
+                    if any(word in text_content for word in ignore_words) and not log.document:
                         continue 
                         
                     target_response = log
@@ -121,11 +131,12 @@ async def process_lookup(client, message):
             if target_response: break
 
         if not target_response:
-            return await status.edit("❌ **Timeout:** Target bot ne koi response nahi diya.")
+            return await status.edit("❌ **Timeout:** Target bot ne time par result nahi diya. Phir se try karein.")
 
         # Handle File or Text Result
         raw_text = ""
         if target_response.document:
+            await status.edit("📂 **Downloading Result File...**")
             path = await client.download_media(target_response)
             with open(path, 'r', encoding='utf-8', errors='ignore') as f:
                 raw_text = f.read()
@@ -133,13 +144,13 @@ async def process_lookup(client, message):
         else:
             raw_text = target_response.text or target_response.caption or ""
 
-        if not raw_text:
-            return await status.edit("❌ **No Data Found or Invalid Format.**")
+        if not raw_text or len(raw_text.strip()) < 2:
+            return await status.edit("❌ **No Data Found or Invalid Data.**")
 
-        # Clean Output (Remove old ads/credits)
+        # Code ko clean karna
         clean_output = re.sub(r"⚡ Designed.*|@\w+", "", raw_text).strip()
         
-        # Format properly if it looks like JSON
+        # Output ko sundar format mein bhejna
         if "{" in clean_output:
             final_msg = f"```json\n{clean_output}\n```\n\n⚡ **{BOT_NAME}**"
         else:
@@ -147,29 +158,31 @@ async def process_lookup(client, message):
         
         await status.delete()
         
-        # Send result (Split if too long)
+        # Result lambe hone par split karke bhejna aur auto-delete karna (60 seconds)
         if len(final_msg) > 4000:
             sent_msgs = []
             for i in range(0, len(final_msg), 4000):
                 msg = await message.reply_text(final_msg[i:i+4000])
                 sent_msgs.append(msg)
                 await asyncio.sleep(1)
-            # Auto delete large results after 60s
+            
             await asyncio.sleep(60)
             for m in sent_msgs:
                 try: await m.delete()
                 except: pass
         else:
             sent = await message.reply_text(final_msg)
-            # Auto delete result after 60s
             await asyncio.sleep(60)
             try: await sent.delete()
             except: pass
 
     except Exception as e:
-        await status.edit(f"❌ **Error:** {str(e)}")
+        try:
+            await status.edit(f"❌ **System Error:** {str(e)}")
+        except:
+            await message.reply_text(f"❌ **System Error:** {str(e)}")
 
-# --- STARTUP ---
+# --- BOT START KARNE KA PROCESS ---
 async def main():
     Thread(target=run_web, daemon=True).start()
     await app.start()
