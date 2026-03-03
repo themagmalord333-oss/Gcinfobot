@@ -8,13 +8,6 @@ from flask import Flask
 from pyrogram import Client, filters, idle
 from pyrogram.errors import PeerIdInvalid, UsernameInvalid
 
-# --- ⚠️ CRITICAL FIX FOR RENDER (MUST BE AT TOP) ---
-try:
-    asyncio.get_event_loop()
-except RuntimeError:
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-
 # --- LOGGING ---
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -204,5 +197,11 @@ async def start_bot():
     await app.stop()
 
 if __name__ == "__main__":
-    loop = asyncio.get_event_loop()
+    # --- PROPER RENDER FIX ---
+    try:
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+    
     loop.run_until_complete(start_bot())
