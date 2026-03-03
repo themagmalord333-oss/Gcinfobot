@@ -1,7 +1,6 @@
 import asyncio
 
 # --- 🔥 CRITICAL FORCE-PATCH FOR PYTHON 3.14 ON RENDER 🔥 ---
-# Ye Pyrogram ko hamesha ek valid loop dega aur RuntimeError aane nahi dega.
 def get_or_create_loop():
     try:
         return asyncio.get_running_loop()
@@ -37,7 +36,7 @@ def run_web():
 # --- CONFIGURATION ---
 API_ID = 37314366
 API_HASH = "bd4c934697e7e91942ac911a5a287b46"
-SESSION_STRING = "BQI5Xz4AlbuU3B5b_1PGYQuKw8hHzdc--FupA_5OTNcfpP0x_N-lTGTWVLbCbAyWVNTog5wIynXUFTi9VcsMw3FqX40tzuK7RnLT32Rcw6mdRKfZ3Dnl903ZU-4wVi_EgnE006uHqnoQjzzwlYqAr7N8dvgfDhn4-vTTj-Pvm9tTobzToT_utoHpsV1KrVVjwYNTGIqPbURAcXtrJIIN_JIcCnMoklpe3WdMAF0w-7TEOxpa9RFM-zyVafqKb1OoGGacq-B6jTNDzCtbv7Tz__dNlYkLtVwMaVE_vnOjZjECIT9Sxsc067edG9d6iXr4G0u_wcC4BR7ZpGrf1UHAp8ErefHs0wAAAAFJSgVkAA"
+SESSION_STRING = "BQI5Xz4AR_aXPWyOA7MjNKKwcf6LpEGlsd7-Z2NQyejkpu9XpXqVJWYmeG50yWst1lHn7vf8wVmyHl3Evp-rS_CJ61_UbXrimcTdq2VBS9uSvAiNFlJ1HE3eFLy6anVQMyxjvDKJIZMAvRadMDAI1sxhZiRSZDZ0Idv05HRlAELA8f3rBoNEB6ch1BEui3ZTgpx7Tttdsj4EoG-HoRNIlENg5IKwTIhHkH2KZ0i4YmHlTIOnlR7Rjn2l5sZMe2A0aP3_Ffwl7feJODQzBVFw8N2nEhoK7C9jHbyqGq2mWLOWl4_EQm7CIlUJ8QN-g2-ei5oPMzWJREOH1Im0DgFzGz0qnfznIgAAAAFJSgVkAA"
 
 TARGET_BOT = "Backupinfo69_bot"
 BOT_NAME = "vipbluehatnetwork"
@@ -48,7 +47,6 @@ ADMIN_ID = 7727470646
 # List to store authorized user IDs
 AUTHORIZED_USERS = [OWNER_ID, ADMIN_ID]
 
-# Pyrogram Client Initialization
 app = Client("vip_blue_hat", api_id=API_ID, api_hash=API_HASH, session_string=SESSION_STRING)
 
 # --- ACCESS CONTROL FILTER ---
@@ -69,9 +67,9 @@ async def authorize_user(client, message):
             AUTHORIZED_USERS.append(user_id)
             await message.reply_text(f"✅ User `{user_id}` has been authorized.")
         else:
-            await message.reply_text("User is already authorized.")
+            await message.reply_text("ℹ️ User is already authorized.")
     except ValueError:
-        await message.reply_text("Invalid User ID.")
+        await message.reply_text("❌ Invalid User ID.")
 
 # --- DASHBOARD / START ---
 @app.on_message(filters.command("start") & filters.private)
@@ -79,37 +77,53 @@ async def start_cmd(client, message):
     if message.from_user.id not in AUTHORIZED_USERS:
         return await message.reply_text("🚫 **Access Denied.**\nContact Admin or Owner for permission.")
     
-    await message.reply_text(
+    text = (
         f"🛡️ **Welcome to {BOT_NAME}**\n\n"
-        "Send lookup commands like:\n"
-        "`/num [number]`\n`/vehicle [plate]`\n`/aadhar [uid]`"
+        "**Available Commands:**\n"
+        "📱 `/num [number]` → Number Details\n"
+        "🚗 `/vehicle [Plate]` → Challan And Rc\n"
+        "🆔 `/aadhar [UID]` → Aadhaar Info\n"
+        "👨‍👩‍👧 `/familyinfo [aadhar]` → Family Tree\n"
+        "🔗 `/vnum [Plate]` → Linked Mobile\n"
+        "📞 `/tgnum [TG ID]` → User's Mobile\n\n"
+        "⚡ **Powered by VIP BLUE HAT NETWORK**"
     )
+    await message.reply_text(text)
 
 # --- MAIN LOOKUP LOGIC ---
-@app.on_message(filters.command(["num", "vehicle", "aadhar", "familyinfo", "vnum", "fam", "sms"]) & filters.private & auth_filter)
+@app.on_message(filters.command(["num", "vehicle", "aadhar", "familyinfo", "vnum", "tgnum"]) & filters.private & auth_filter)
 async def process_lookup(client, message):
     if len(message.command) < 2:
-        return await message.reply_text("❌ Data missing!")
+        return await message.reply_text(f"❌ **Data missing!**\nSahi format use karein: `/{message.command[0]} [value]`")
 
-    status = await message.reply_text("🔍 **Searching Data...**")
+    status = await message.reply_text("🔍 **Fetching Details... Please wait.**")
     
     try:
         # Forward request to target bot
         sent_req = await client.send_message(TARGET_BOT, message.text)
         
         target_response = None
-        for _ in range(20): # 40 seconds timeout
+        
+        # SMART WAIT LOOP: 60 Seconds Timeout (Wait for ACTUAL response)
+        for _ in range(30): 
             await asyncio.sleep(2)
-            async for log in client.get_chat_history(TARGET_BOT, limit=1):
-                if log.id != sent_req.id:
+            async for log in client.get_chat_history(TARGET_BOT, limit=2):
+                # Check if message is from Target Bot and newer than our request
+                if not log.from_user.is_self and log.id > sent_req.id:
+                    text_content = (log.text or log.caption or "").lower()
+                    
+                    # Ignore "Processing" messages sent by the target bot
+                    if any(word in text_content for word in ["wait", "searching", "processing", "loading"]):
+                        continue 
+                        
                     target_response = log
                     break
             if target_response: break
 
         if not target_response:
-            return await status.edit("❌ No response from target.")
+            return await status.edit("❌ **Timeout:** Target bot ne koi response nahi diya.")
 
-        # Handle File or Text
+        # Handle File or Text Result
         raw_text = ""
         if target_response.document:
             path = await client.download_media(target_response)
@@ -119,32 +133,49 @@ async def process_lookup(client, message):
         else:
             raw_text = target_response.text or target_response.caption or ""
 
-        # Remove old ads/credits from text
-        clean_output = re.sub(r"⚡ Designed.*|@\w+", "", raw_text).strip()
+        if not raw_text:
+            return await status.edit("❌ **No Data Found or Invalid Format.**")
 
-        final_msg = f"```json\n{clean_output}\n```\n\n⚡ **{BOT_NAME}**"
+        # Clean Output (Remove old ads/credits)
+        clean_output = re.sub(r"⚡ Designed.*|@\w+", "", raw_text).strip()
+        
+        # Format properly if it looks like JSON
+        if "{" in clean_output:
+            final_msg = f"```json\n{clean_output}\n```\n\n⚡ **{BOT_NAME}**"
+        else:
+            final_msg = f"**Result:**\n`{clean_output}`\n\n⚡ **{BOT_NAME}**"
         
         await status.delete()
-        sent = await message.reply_text(final_msg)
         
-        # Auto delete result after 60 seconds
-        await asyncio.sleep(60)
-        try:
-            await sent.delete()
-        except:
-            pass
+        # Send result (Split if too long)
+        if len(final_msg) > 4000:
+            sent_msgs = []
+            for i in range(0, len(final_msg), 4000):
+                msg = await message.reply_text(final_msg[i:i+4000])
+                sent_msgs.append(msg)
+                await asyncio.sleep(1)
+            # Auto delete large results after 60s
+            await asyncio.sleep(60)
+            for m in sent_msgs:
+                try: await m.delete()
+                except: pass
+        else:
+            sent = await message.reply_text(final_msg)
+            # Auto delete result after 60s
+            await asyncio.sleep(60)
+            try: await sent.delete()
+            except: pass
 
     except Exception as e:
-        await status.edit(f"❌ Error: {str(e)}")
+        await status.edit(f"❌ **Error:** {str(e)}")
 
 # --- STARTUP ---
 async def main():
     Thread(target=run_web, daemon=True).start()
     await app.start()
-    print("✅ VIP BLUE HAT NETWORK IS ONLINE")
+    print("✅ VIP BLUE HAT NETWORK IS ONLINE AND READY")
     await idle()
 
 if __name__ == "__main__":
-    # Get the loop securely using our patched function
     loop = asyncio.get_event_loop()
     loop.run_until_complete(main())
