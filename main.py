@@ -1,19 +1,25 @@
-import os
 import asyncio
+
+# --- 🔥 CRITICAL FORCE-PATCH FOR PYTHON 3.14 ON RENDER 🔥 ---
+# Ye Pyrogram ko hamesha ek valid loop dega aur RuntimeError aane nahi dega.
+def get_or_create_loop():
+    try:
+        return asyncio.get_running_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        return loop
+
+asyncio.get_event_loop = get_or_create_loop
+
+# --- NOW IMPORT EVERYTHING ELSE ---
+import os
 import logging
 import json
 import re
 from threading import Thread
 from flask import Flask
-from pyrogram import Client, filters, enums, idle
-from pyrogram.errors import UserNotParticipant, PeerIdInvalid, ChannelInvalid
-
-# --- ⚠️ ASYNCIO EVENT LOOP FIX ---
-try:
-    asyncio.get_event_loop()
-except RuntimeError:
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
+from pyrogram import Client, filters, idle
 
 # --- LOGGING ---
 logging.basicConfig(level=logging.INFO)
@@ -42,6 +48,7 @@ ADMIN_ID = 7727470646
 # List to store authorized user IDs
 AUTHORIZED_USERS = [OWNER_ID, ADMIN_ID]
 
+# Pyrogram Client Initialization
 app = Client("vip_blue_hat", api_id=API_ID, api_hash=API_HASH, session_string=SESSION_STRING)
 
 # --- ACCESS CONTROL FILTER ---
@@ -122,7 +129,10 @@ async def process_lookup(client, message):
         
         # Auto delete result after 60 seconds
         await asyncio.sleep(60)
-        await sent.delete()
+        try:
+            await sent.delete()
+        except:
+            pass
 
     except Exception as e:
         await status.edit(f"❌ Error: {str(e)}")
@@ -135,4 +145,6 @@ async def main():
     await idle()
 
 if __name__ == "__main__":
+    # Get the loop securely using our patched function
+    loop = asyncio.get_event_loop()
     loop.run_until_complete(main())
