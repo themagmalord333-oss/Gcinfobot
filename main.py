@@ -1,22 +1,19 @@
 import os
 import asyncio
 import logging
-
-# --- ⚠️ CRITICAL FIX FOR RENDER (MUST BE AT TOP) ---
-# Ye line Render par bot ko crash hone se bachayegi
-try:
-    asyncio.get_event_loop()
-except RuntimeError:
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-
-# --- IMPORTS ---
 import json
 import re
 from threading import Thread
 from flask import Flask
 from pyrogram import Client, filters, idle
 from pyrogram.errors import PeerIdInvalid, UsernameInvalid
+
+# --- ⚠️ CRITICAL FIX FOR RENDER (MUST BE AT TOP) ---
+try:
+    asyncio.get_event_loop()
+except RuntimeError:
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
 
 # --- LOGGING ---
 logging.basicConfig(level=logging.INFO)
@@ -35,7 +32,7 @@ web_app = Flask(__name__)
 
 @web_app.route('/')
 def home():
-    return "⚡ Gourisen OSINT Bot is Running Successfully!"
+    return "⚡ Vipbluehatnetwork OSINT Bot is Running Successfully!"
 
 def run_web():
     port = int(os.environ.get("PORT", 8080))
@@ -49,12 +46,11 @@ def keep_alive():
 # --- CONFIGURATION ---
 API_ID = 37314366
 API_HASH = "bd4c934697e7e91942ac911a5a287b46"
-SESSION_STRING = "BQI5Xz4AYmk4kg6TAh1_7Ebt65uwpCt5ryzpfEb-DlJ-hwhK2OuYoKI9Rboc391MVc-TRBHL_eQkMYyl1WVuKq9po2r6RKIJBLPf9vzO7_fWiDSz0tC1XUDFFvX1PrmUFls8cZgJWg1TZx6EOYhlTMnXhhWfBOnHXb5orXyFlRd5sxrXCC-A-kEnmtfAi1UGuX4tgzUplpgYDQHS1lQK-vPExaML7FajZfsasoIXvOFWRndMSY3qOqhSqm-ZLIhRhaVa333weGM8z4hQqE9iuvsYFr4wwwAnYaRRSBob8MfIN5tGSyZpbT-6iOZTyx7ttqTh6mKqn0JatY3Lk1n6P7ulu3Pv_gAAAAFJSgVkAA"
+SESSION_STRING = "BQI5Xz4AlbuU3B5b_1PGYQuKw8hHzdc--FupA_5OTNcfpP0x_N-lTGTWVLbCbAyWVNTog5wIynXUFTi9VcsMw3FqX40tzuK7RnLT32Rcw6mdRKfZ3Dnl903ZU-4wVi_EgnE006uHqnoQjzzwlYqAr7N8dvgfDhn4-vTTj-Pvm9tTobzToT_utoHpsV1KrVVjwYNTGIqPbURAcXtrJIIN_JIcCnMoklpe3WdMAF0w-7TEOxpa9RFM-zyVafqKb1OoGGacq-B6jTNDzCtbv7Tz__dNlYkLtVwMaVE_vnOjZjECIT9Sxsc067edG9d6iXr4G0u_wcC4BR7ZpGrf1UHAp8ErefHs0wAAAAFJSgVkAA"
 
-MAIN_SOURCE_BOT = "Random_insight69_bot"
-TG_LOOKUP_BOT = "Jhsgdysgshbot"
+MAIN_SOURCE_BOT = "Backupinfo69_bot"
 
-app = Client("gourisen_osint_bot", api_id=API_ID, api_hash=API_HASH, session_string=SESSION_STRING)
+app = Client("vipbluehatnetwork", api_id=API_ID, api_hash=API_HASH, session_string=SESSION_STRING)
 
 # --- 🔐 PERMISSION COMMANDS (OWNER ONLY) ---
 @app.on_message(filters.command("auth") & filters.user(OWNER_ID))
@@ -81,7 +77,7 @@ async def unauth_user(client, message):
 async def get_target_id(client, message):
     if not is_authorized(message.from_user.id): return
     if len(message.command) < 2: return await message.reply("ℹ️ Usage: `/id @username`")
-    
+
     status = await message.reply("🔍 **Checking...**")
     try:
         user = await client.get_users(message.command[1])
@@ -89,87 +85,35 @@ async def get_target_id(client, message):
     except Exception as e:
         await status.edit(f"❌ **Error:** {e}")
 
-# --- 🆕 FEATURE 2: /tg (Lookup + Limit Check + Regex) ---
-@app.on_message(filters.command("tg") & (filters.private | filters.group))
-async def tg_lookup(client, message):
-    if not is_authorized(message.from_user.id): return
-    if len(message.command) < 2: return await message.reply("ℹ️ Usage: `/tg [UserID]`")
-
-    uid = message.command[1]
-    if not uid.isdigit(): return await message.reply("❌ Only Numeric IDs allowed.")
-
-    status = await message.reply(f"🔍 **Searching ID {uid}...**")
-    
-    try:
-        sent = await client.send_message(TG_LOOKUP_BOT, f"tg{uid}")
-        target_response = None
-
-        # Wait Loop (25 attempts)
-        for _ in range(25):
-            await asyncio.sleep(2)
-            async for log in client.get_chat_history(TG_LOOKUP_BOT, limit=1):
-                if log.id == sent.id: continue
-                
-                txt = (log.text or log.caption or "").lower()
-                
-                # 1. LIMIT CHECK
-                if "лимит" in txt or "limit" in txt:
-                    await status.delete()
-                    return await message.reply("⚠️ **Bro Limit Reach**")
-
-                # 2. SUCCESS CHECK
-                if "телефон" in txt or "phone" in txt:
-                    target_response = log
-                    break
-            if target_response: break
-        
-        if not target_response:
-            await status.edit("❌ **No Data Found**")
-            return
-
-        # 🔥 SMART REGEX EXTRACTION 🔥
-        full_text = target_response.text or target_response.caption or ""
-        
-        # Ye 'Телефон:' ke baad wala number uthayega ignore karke spaces ko
-        match = re.search(r"(?:Телефон|Phone):\s*(\+?\d+)", full_text, re.IGNORECASE)
-
-        if match:
-            await status.edit(f"📞 **Phone Number:** `{match.group(1)}`")
-        else:
-            await status.edit("❌ **No Data Found** (No number pattern match)")
-
-    except Exception as e:
-        await status.edit(f"❌ Error: {e}")
-
 # --- DASHBOARD ---
 @app.on_message(filters.command(["start", "help", "menu"]))
 async def dashboard(client, message):
     if not is_authorized(message.from_user.id): return
     text = (
-        "📖 **Gourisen OSINT DASHBOARD**\n"
+        "📖 **vipbluehatnetwork DASHBOARD**\n"
         "━━━━━━━━━━━━━━━━━━\n"
         "🔍 **Lookup Services:**\n"
-        "📱 `/num`  🚗 `/vehicle`  🆔 `/aadhar`\n"
-        "👨‍👩‍👧‍👦 `/familyinfo`  🔗 `/vnum`  💸 `/fam`\n"
-        "📨 `/sms`\n\n"
-        "🆕 **New Tools:**\n"
+        "📱 `/num`  🚗 `/Vehicle`  🆔 `/Aadhar`\n"
+        "👨‍👩‍👧‍👦 `/familyinfo`  🔗 `/Vnum`  💳 `/Pan`\n"
+        "🤖 `/tgnum`\n\n"
+        "🆕 **Other Tools:**\n"
         "👤 `/id [user]` - Get User ID\n"
-        "🤖 `/tg [id]` - TG Lookup\n"
         "━━━━━━━━━━━━━━━━━━"
     )
     await message.reply(text)
 
 # --- MAIN SEARCH (FULL LOGIC WITH FILE DOWNLOAD) ---
-@app.on_message(filters.command(["num", "vehicle", "aadhar", "familyinfo", "vnum", "fam", "sms"]))
+@app.on_message(filters.command(["num", "Vehicle", "Aadhar", "familyinfo", "Vnum", "Pan", "tgnum"]))
 async def main_process(client, message):
     if not is_authorized(message.from_user.id): return
 
     if len(message.command) < 2:
         return await message.reply(f"❌ **Missing Data!**\nUsage: `/{message.command[0]} <value>`")
 
-    status = await message.reply("🔍 **Searching via Gourisen OSINT...**")
+    status = await message.reply("🔍 **Searching via vipbluehatnetwork...**")
 
     try:
+        # Since /tgnum is just another feature now, we send the exact command to the backup bot
         sent = await client.send_message(MAIN_SOURCE_BOT, message.text)
         target_response = None
 
@@ -181,12 +125,12 @@ async def main_process(client, message):
 
                 text_content = (log.text or log.caption or "").lower()
                 ignore_words = ["wait", "processing", "searching", "scanning", "generating", "loading"]
-                
+
                 # Agar sirf 'wait' msg hai to continue karo
                 if any(w in text_content for w in ignore_words) and not log.document:
                     if attempt % 5 == 0: await status.edit(f"⏳ **Fetching... ({attempt})**")
                     continue
-                
+
                 target_response = log
                 break
             if target_response: break
@@ -215,7 +159,7 @@ async def main_process(client, message):
         # --- CLEANING ---
         raw_text = raw_text.replace(r"⚡ Designed & Powered by @DuXxZx\_info", "")
         raw_text = raw_text.replace("@DuXxZx_info", "")
-        
+
         # --- JSON FORMATTING ---
         final_output = raw_text
         try:
@@ -230,7 +174,7 @@ async def main_process(client, message):
                         data = data[0]["results"]
                     elif isinstance(data, dict) and "results" in data:
                         data = data["results"]
-                    
+
                     final_output = json.dumps(data, indent=4, ensure_ascii=False)
         except: pass
 
@@ -255,7 +199,7 @@ async def start_bot():
     keep_alive() 
     print("🚀 Starting Bot...")
     await app.start()
-    print("✅ Gourisen OSINT Bot is Online!")
+    print("✅ vipbluehatnetwork Bot is Online!")
     await idle()
     await app.stop()
 
