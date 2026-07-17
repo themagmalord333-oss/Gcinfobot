@@ -1,6 +1,6 @@
 
 <div align="center">
-<img src="https://i.ibb.co/gZhFNqLP/x.jpg" alt="Bot Logo" width="150" height="150" style="border-radius: 50%;">
+<img src="https://i.ibb.co/gZhFNqLP/x.jpg" alt="Bot Logo">
 <h1>Telegram Proxy & Data Routing Bot</h1>
 <p>
 <b>A Pyrogram-based intermediary bot for automated querying, response parsing, and access control.</b>
@@ -21,16 +21,12 @@ This script acts as a middleman between authorized users and a hidden backend ta
    * Applies Regex (`re.sub`) to strip external branding, tags, and `@usernames` from the raw text.
  6. **Delivery & Auto-Deletion:** Formats the output (JSON block or Markdown), chunks messages if they exceed Telegram's 4000-character limit, and schedules an automatic `message.delete()` after 60 seconds to clear chat history.
 
----
-
 ## 🛠 Technical Features
  * **Strict Authorization System:** Only hardcoded `OWNER_ID` and `ADMIN_ID` can execute the `/auth` command to append new users to the active runtime list.
  * **Smart Response Parser:** Handles both standard text replies and `.txt` document uploads from the target bot.
  * **Pagination (Message Splitting):** Automatically chunks large payloads into sequential messages to prevent API `MessageTooLong` exceptions.
  * **Event Loop Management:** Explicitly creates and sets a new asyncio event loop to prevent runtime errors in newer Python environments (3.10+).
  * **Daemon Web Server:** Runs a parallel Flask thread on `0.0.0.0` to bind to cloud provider ports, preventing container suspension.
-
----
 
 ## 🚀 Setup & Deployment
 
