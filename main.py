@@ -1,10 +1,18 @@
+import os
+from dotenv import load_dotenv
+
+# Load environment variables first
+load_dotenv()
+
 # --- 🛑 SABSE PEHLE EVENT LOOP BANAO (CRITICAL FIX) 🛑 ---
 import asyncio
-loop = asyncio.new_event_loop()
-asyncio.set_event_loop(loop)
+try:
+    loop = asyncio.get_running_loop()
+except RuntimeError:
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
 
 # --- AB BAAKI SAB IMPORT KARO ---
-import os
 import logging
 import json
 import re
@@ -19,22 +27,24 @@ logger = logging.getLogger(__name__)
 # --- WEB SERVER (FOR RENDER/UPTIME) ---
 web_app = Flask(__name__)
 @web_app.route('/')
-def home(): return "🤖 VIP BLUE HAT NETWORK is Running!"
+def home():
+    bot_name = os.getenv("BOT_NAME", "VIP BLUE HAT NETWORK")
+    return f"🤖 {bot_name.upper()} is Running!"
 
 def run_web():
-    port = int(os.environ.get("PORT", 8080))
+    port = int(os.getenv("PORT", 8080))
     web_app.run(host="0.0.0.0", port=port)
 
-# --- CONFIGURATION ---
-API_ID = 37314366
-API_HASH = "bd4c934697e7e91942ac911a5a287b46"
-SESSION_STRING = "BQI5Xz4AR_aXPWyOA7MjNKKwcf6LpEGlsd7-Z2NQyejkpu9XpXqVJWYmeG50yWst1lHn7vf8wVmyHl3Evp-rS_CJ61_UbXrimcTdq2VBS9uSvAiNFlJ1HE3eFLy6anVQMyxjvDKJIZMAvRadMDAI1sxhZiRSZDZ0Idv05HRlAELA8f3rBoNEB6ch1BEui3ZTgpx7Tttdsj4EoG-HoRNIlENg5IKwTIhHkH2KZ0i4YmHlTIOnlR7Rjn2l5sZMe2A0aP3_Ffwl7feJODQzBVFw8N2nEhoK7C9jHbyqGq2mWLOWl4_EQm7CIlUJ8QN-g2-ei5oPMzWJREOH1Im0DgFzGz0qnfznIgAAAAFJSgVkAA"
+# --- CONFIGURATION FROM ENV ---
+API_ID = int(os.getenv("API_ID"))
+API_HASH = os.getenv("API_HASH")
+SESSION_STRING = os.getenv("SESSION_STRING")
 
-TARGET_BOT = "Backupinfo69_bot"
-BOT_NAME = "vipbluehatnetwork"
+TARGET_BOT = os.getenv("TARGET_BOT")
+BOT_NAME = os.getenv("BOT_NAME")
 
-OWNER_ID = 7762163050
-ADMIN_ID = 7727470646
+OWNER_ID = int(os.getenv("OWNER_ID"))
+ADMIN_ID = int(os.getenv("ADMIN_ID"))
 
 # List to store authorized user IDs
 AUTHORIZED_USERS = [OWNER_ID, ADMIN_ID]
@@ -54,7 +64,7 @@ async def authorize_user(client, message):
 
     if len(message.command) < 2:
         return await message.reply_text("❌ **Format Galat Hai!**\nUse: `/auth [User_ID]`")
-    
+
     try:
         user_id = int(message.command[1])
         if user_id not in AUTHORIZED_USERS:
@@ -70,9 +80,9 @@ async def authorize_user(client, message):
 async def start_cmd(client, message):
     if message.from_user.id not in AUTHORIZED_USERS:
         return await message.reply_text("🚫 **Access Denied.**\nIse use karne ke liye Admin ya Owner se permission lein.")
-    
+
     text = (
-        f"🛡️ **Welcome to {BOT_NAME}**\n\n"
+        f"🛡️ **Welcome to {BOT_NAME.upper()}**\n\n"
         "**Available Commands:**\n"
         "📱 `/num [number]` → Number Details\n"
         "🚗 `/vehicle [Plate]` → Challan And Rc\n"
@@ -80,7 +90,7 @@ async def start_cmd(client, message):
         "👨‍👩‍👧 `/familyinfo [aadhar]` → Family Tree\n"
         "🔗 `/vnum [Plate]` → Linked Mobile\n"
         "📞 `/tgnum [TG ID]` → User's Mobile\n\n"
-        "⚡ **Powered by VIP BLUE HAT NETWORK**"
+        f"⚡ **Powered by {BOT_NAME.upper()}**"
     )
     await message.reply_text(text)
 
@@ -94,25 +104,25 @@ async def process_lookup(client, message):
         return await message.reply_text(f"❌ **Data missing!**\nSahi format use karein: `/{message.command[0]} [value]`")
 
     status = await message.reply_text("🔍 **Fetching Details... Please wait.**")
-    
+
     try:
         try:
             sent_req = await client.send_message(TARGET_BOT, message.text)
         except Exception as e:
             return await status.edit(f"❌ **Target Bot Error:** Pata lagao ki kya aapne target bot ko kabhi /start kiya hai ya nahi.\nError: {e}")
-        
+
         target_response = None
-        
+
         for _ in range(30): 
             await asyncio.sleep(2)
             async for log in client.get_chat_history(TARGET_BOT, limit=3):
                 if log.id > sent_req.id:
                     text_content = (log.text or log.caption or "").lower()
-                    
+
                     ignore_words = ["wait", "searching", "processing", "loading", "fetching", "scanning"]
                     if any(word in text_content for word in ignore_words) and not log.document:
                         continue 
-                        
+
                     target_response = log
                     break
             if target_response: break
@@ -134,21 +144,21 @@ async def process_lookup(client, message):
             return await status.edit("❌ **No Data Found or Invalid Data.**")
 
         clean_output = re.sub(r"⚡ Designed.*|@\w+", "", raw_text).strip()
-        
+
         if "{" in clean_output:
-            final_msg = f"```json\n{clean_output}\n```\n\n⚡ **{BOT_NAME}**"
+            final_msg = f"```json\n{clean_output}\n```\n\n⚡ **{BOT_NAME.upper()}**"
         else:
-            final_msg = f"**Result:**\n`{clean_output}`\n\n⚡ **{BOT_NAME}**"
-        
+            final_msg = f"**Result:**\n`{clean_output}`\n\n⚡ **{BOT_NAME.upper()}**"
+
         await status.delete()
-        
+
         if len(final_msg) > 4000:
             sent_msgs = []
             for i in range(0, len(final_msg), 4000):
                 msg = await message.reply_text(final_msg[i:i+4000])
                 sent_msgs.append(msg)
                 await asyncio.sleep(1)
-            
+
             await asyncio.sleep(60)
             for m in sent_msgs:
                 try: await m.delete()
@@ -169,9 +179,8 @@ async def process_lookup(client, message):
 async def main():
     Thread(target=run_web, daemon=True).start()
     await app.start()
-    print("✅ VIP BLUE HAT NETWORK IS ONLINE AND READY")
+    print(f"✅ {BOT_NAME.upper()} IS ONLINE AND READY")
     await idle()
 
 if __name__ == "__main__":
-    # Yahan ab purana function nahi maang rahe, sidha loop chalayenge
     loop.run_until_complete(main())
