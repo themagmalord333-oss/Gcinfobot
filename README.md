@@ -65,6 +65,8 @@ All commands below follow the same routing logic to the TARGET_BOT.
 | /vnum | Vehicle Plate Number |
 | /tgnum | Telegram User ID |
 | /fam / /sms | Target Identifiers |
+
+
 👨‍💻 Developer & Community
  * Developer: @Smugllers
  * Telegram Group: @MAGMAxRICH
